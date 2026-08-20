@@ -6207,6 +6207,8 @@ check(!/chipH/.test(SCRIPT), "no chipH — no geometry constant for an unused fe
       "About spans both rows of column 3 — the column after the two the four minis fill");
     check(/\.info-actions > \.info-lead\{[^}]*min-height:66px/.test(CSS),
       ".info-lead is the same 66px full height as other lead commands");
+    check(!/\.info-actions > \.info-lead\{[^}]*min-width/.test(CSS),
+      ".info-lead states no min-width of its own — its width is button.big's shared policy, so About stays as wide as every other lead command");
     check(/@media \(max-width:900px\)\{ \.info-actions > \.info-lead\{min-height:75px\}/.test(CSS),
       "including at the breakpoint where lead commands rise to 75px");
 
