@@ -584,17 +584,17 @@
   .rb-group label.field > span{margin-bottom:2px;font-size:10.5px}
 
   /* ---------- Start / Info group ---------- */
-  /* Four documents are four equal doors — Tour, Tips, Privacy, Bug report, all
-     the same compact button — and About is the lead because it is the group's
-     identity, not because it is the one most reached for.
+  /* Five documents are five equal doors — Tour, Tips, Privacy, Bug report,
+     More apps, all the same compact button — and About is the lead because
+     it is the group's identity, not because it is the one most reached for.
 
      .rb-file's cells come in pairs: two half-height minis to a column, or one
-     full-height command spanning both. So four minis fill columns 1 and 2 top
-     to bottom (grid-auto-flow:column), and About takes column 3. .rb-lead2
+     full-height command spanning both. So five minis fill columns 1 through 3
+     top to bottom (grid-auto-flow:column), and About takes column 4. .rb-lead2
      stays — that is the Export group's, for two genuine peers, and this group
      has none. */
   .info-actions > .info-lead{
-    grid-column:3;grid-row:1 / span 2;height:auto;min-height:66px;
+    grid-column:4;grid-row:1 / span 2;height:auto;min-height:66px;
   }
   @media (max-width:900px){ .info-actions > .info-lead{min-height:75px} }
 
@@ -619,6 +619,53 @@
     font:inherit;font-size:11px;background:var(--line-2);border:1px solid var(--line);
     border-radius:3px;padding:0 3px;color:var(--ink-2);
   }
+  /* The FORM apps document: one row per app, a coloured tile carrying that
+     app's own mark in white — the tab icon's recipe (white glyph on a
+     brand tile) reused at list-row scale, sized up a step for the extra room
+     the owner asked for after the browser check. Tiles stay brand-coloured
+     in BOTH colour schemes on purpose: they are logos, not chrome, and
+     neither --brand nor the DRIFTFORM literal below is redefined under the
+     dark media query, so no dark-scheme override is needed here. */
+  .apps-list{list-style:none;display:grid;gap:20px}
+  /* The intro-to-first-row space is NOT set on .apps-intro (bare class,
+     specificity 0,1,0) — that lost to .info-doc p{margin:0 0 7px} (0,1,1)
+     and silently painted 7px instead of 18px, which is why that rule and
+     the class are gone. It is also NOT set on a bare .apps-list{margin:…}:
+     .info-doc ul{margin:0;padding-left:16px} is ALSO (0,1,1) and would have
+     repeated the identical bug, one level down — verified with a headless
+     Chromium render (getComputedStyle + getBoundingClientRect), not by
+     reasoning alone, before landing on this selector. #infoAppsDoc
+     .apps-list is (1,1,0): the id beats .info-doc ul outright, on every
+     side the shorthand sets, so 26px actually reaches the page. The same
+     rule's padding-left:16px was the identical defeat on the OTHER axis —
+     both rows read indented from the intro's left edge until padding:0
+     moved into this same id-scoped rule, for the same reason. */
+  #infoAppsDoc .apps-list{margin:26px 0 4px;padding:0}
+  .apps-row{display:flex;align-items:flex-start;gap:16px}
+  .apps-tile{
+    flex:0 0 auto;width:44px;height:44px;border-radius:9px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  /* Ink stated on all three selectors together (not once on .apps-tile alone):
+     each tile's own literal fill sits right beside its own literal ink, which
+     is what test/fixtures.js's chrome-pair scan reads as a deliberate literal-
+     on-fill choice rather than the page's --ink landing on --brand by
+     accident — the same "avatar initials" bucket that scan already carves out. */
+  .apps-tile,.apps-tile-tierform,.apps-tile-driftform{color:#fff}
+  .apps-tile svg{width:28px;height:28px;fill:currentColor}
+  .apps-tile-tierform{background:var(--brand)}
+  /* #801818 is a literal, not a token of this app: it is DRIFTFORM's own
+     brand colour, pinned by test/dom.js against the fill sprites/driftform-logo.svg
+     itself carries. */
+  .apps-tile-driftform{background:#801818}
+  .apps-name{display:block;font-weight:650;color:var(--ink);font-size:13.5px;margin-bottom:2px}
+  .apps-here{font-weight:400;font-size:11px;color:var(--ink-2);margin-left:6px}
+  .apps-tag{display:block;margin-top:4px;line-height:1.55}
+  /* .about-made's own rule states margin-top:14px!important, so only a MORE
+     specific !important rule can give this second copy more room above it —
+     a plain override would silently lose. Scoped to #infoAppsDoc alone: the
+     About copy keeps its original 14px. */
+  #infoAppsDoc .about-made{margin-top:22px!important}
   /* About has its own centred identity layout; the other documents remain
      prose. The mark is the sprite's `#i-logo`, drawn here in `--brand`. The
      GitHub path is the supplied official mark, embedded because the app must
@@ -1589,6 +1636,7 @@
 <symbol id="i-frame-bug" viewBox="0 -960 960 960"><path d="M480.11-186.67q69.89 0 119.56-49.33 49.66-49.33 49.66-119.33V-520q0-70-49.77-119.33-49.77-49.34-119.67-49.34-69.89 0-119.56 49.34Q310.67-590 310.67-520v164.67q0 70 49.77 119.33t119.67 49.33ZM400-320h160v-66.67H400V-320Zm0-168.67h160v-66.66H400v66.66Zm80.33 51.34H480h.33-.33.33-.33.33-.33.33ZM480-120q-65.25 0-120.96-31.33-55.71-31.34-84.37-88.67H160v-66.67h89.33q-5.66-24-5.83-48.44-.17-24.45-.17-48.89H160v-66.67h83.29q0-25.77.52-51.55.52-25.78 6.86-51.11H160V-640h117.33q14-26.33 35.17-47t47.5-35l-72.67-72.67L332.67-840 424-748.67q27.78-9.66 56.56-9.66 28.77 0 56.77 9.66l92-91.33 45.34 45.33L602-722q26.33 14.33 46.77 35.28 20.43 20.94 35.9 46.72H800v66.67h-90.67q7 25.33 6.84 51.11-.17 25.78-.17 51.55h84V-404h-84q0 24.67.17 49 .16 24.33-5.5 48.33H800V-240H686q-28 58-84.13 89-56.13 31-121.87 31ZM40-725.33v-128q0-27 19.83-46.84Q79.67-920 106.67-920h128v66.67h-128v128H40ZM234.67-40h-128q-27 0-46.84-19.83Q40-79.67 40-106.67v-128h66.67v128h128V-40Zm490.66 0v-66.67h128v-128H920v128q0 27-19.83 46.84Q880.33-40 853.33-40h-128Zm128-685.33v-128h-128V-920h128q27 0 46.84 19.83Q920-880.33 920-853.33v128h-66.67Z"/></symbol>
 <symbol id="i-circles" viewBox="0 -960 960 960"><path d="M682-380q29.67 0 58.5-5.17 28.83-5.16 56.17-14.83-17 137-118.67 228.5T438.67-80q-74.34 0-139.84-28.17-65.5-28.16-114-76.66t-76.66-114Q80-364.33 80-438.67q0-139 91.83-241.33Q263.67-782.33 402-796.67q-12.33 27.34-17.17 56.84Q380-710.33 380-680q-83.33 22.33-136.67 88.67Q190-525 190-438.67q0 104 72.33 176.34Q334.67-190 438.67-190q86.33 0 154-53 67.66-53 89.33-137Zm1.33-540q98.34 0 167.17 68.9 68.83 68.9 68.83 167.34 0 98.43-68.9 167.43t-167.33 69q-98.43 0-167.43-69.03t-69-167.64q0-98.33 69.02-167.17Q584.72-920 683.33-920ZM683-557.33q51 0 88.67-37.67 37.66-37.67 37.66-88.67t-37.66-88.66Q734-810 683-810t-88.67 37.67q-37.66 37.66-37.66 88.66T594.33-595Q632-557.33 683-557.33Zm.33-126.67ZM437-435.67Z"/></symbol>
 <symbol id="i-edit" viewBox="0 -960 960 960"><path d="M186.67-186.67H235L680-631l-48.33-48.33-445 444.33v48.33ZM120-120v-142l559.33-558.33q9.34-9 21.5-14 12.17-5 25.5-5 12.67 0 25 5 12.34 5 22 14.33L821-772q10 9.67 14.5 22t4.5 24.67q0 12.66-4.83 25.16-4.84 12.5-14.17 21.84L262-120H120Zm652.67-606-46-46 46 46Zm-117 71-24-24.33L680-631l-24.33-24Z"/></symbol>
+<symbol id="i-extension" viewBox="0 -960 960 960"><path d="M186.67-186.67h546.66V-376l42.34-20q18-8 28.83-25.33 10.83-17.34 10.83-37.34 0-19.95-10.83-36.98-10.83-17.02-28.83-25.68L733.33-541v-192.33h-198L526-790q-4.33-25.33-22.95-42.67Q484.44-850 459.62-850q-25.95 0-44.79 17.33Q396-815.33 391.67-790l-9.34 56.67h-195v102Q242.67-611 276-564.15q33.33 46.86 33.33 105.67 0 59.81-33.33 107.15-33.33 47.33-89.33 65v99.66ZM194-120q-30.67 0-52.33-21.67-21.67-21.66-21.67-53V-338q50.67-2 86.67-36.17 36-34.16 36-84.5 0-50-36-84.33t-86-36.26V-726q0-31 21.5-52.5t52.5-21.5H326q6.75-49.58 44.39-83.12 37.63-33.55 88.77-33.55 50.17 0 87.96 33.55 37.79 33.54 45.55 83.12H726q31 0 52.5 21.5T800-726v142.67q37.33 18 59.67 50.33Q882-500.67 882-458.67q0 42.34-22.33 75Q837.33-351 800-334v139.33q0 31.34-21.5 53Q757-120 726-120H194Zm307.33-338.67Z"/></symbol>
 <!-- PLACEHOLDER — everything BELOW this line is NOT Material Symbols, and the
      split is what NOTICE describes and test/dom.js audits against the source
      files in sprites/. #i-logo is the TIERFORM
@@ -1596,8 +1644,11 @@
      and credited to nobody else. Its path is copied verbatim from
      sprites/logo.svg, which is the provenance record for it — only the source
      fill is stripped, so the mark takes currentColor like every icon above.
-     Hence its own viewBox: the artwork's canvas, not Google's 960 grid. -->
+     Hence its own viewBox: the artwork's canvas, not Google's 960 grid.
+     #i-driftform is the DRIFTFORM mark, also the author's own work, provenance
+     sprites/driftform-logo.svg. -->
 <symbol id="i-logo" viewBox="0 0 2343 1952"><g transform="translate(-462 -206)"><g><path d="M1169 1949 2338 0 0 0 172.076 286.891 172.698 285.853 1840.86 285.853 1669.3 571.707 1669.16 571.707 1473.87 896.839 1169 1405.12 836.444 850.673 1168.22 850.673 1335.79 571.707 342.907 571.707 1169 1949Z" fill-rule="evenodd" fill-opacity="1" transform="matrix(1 0 0 -1 464 2158)"/></g></g></symbol>
+<symbol id="i-driftform" viewBox="0 0 1953 1952"><g transform="translate(-673 -206)"><g><path d="M1650 209C2187.93 209 2624 645.298 2624 1183.5 2624 1721.7 2187.93 2158 1650 2158L1650 1833.17C2008.62 1833.17 2299.33 1542.3 2299.33 1183.5 2299.33 824.699 2008.62 533.833 1650 533.833 1291.38 533.833 1000.67 824.699 1000.67 1183.5L1000.74 1184.85 676.069 1184.85 676 1183.5C676 645.298 1112.07 209 1650 209Z" fill-rule="evenodd" fill-opacity="1"/><path d="M1000 1185 1650 1185 1650 1833C1313.42 1833 1036.58 1577.48 1003.29 1250.04L1000 1185Z" fill-rule="evenodd" fill-opacity="1"/></g></g></symbol>
 </svg>
 
 <div id="shell">
@@ -1757,11 +1808,12 @@
         <div class="lbl">People</div>
       </div>
       <input type="file" id="fileSwap" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden>
-      <!-- Four one-row commands filling columns 1 and 2 — the grid flows down a
-           column before moving right, so the markup order is Tour, Tips,
-           Privacy, Bug report — and About as the full-height lead in column 3.
-           See .info-actions in the sheet for why the four are peers.
-           Tour now dispatches like its three neighbours: data-cmd="tour" runs
+      <!-- Five one-row commands filling columns 1 through 3 — the grid flows
+           down a column before moving right, so the markup order is Tour,
+           Tips, Privacy, Bug report, More apps — and About as the
+           full-height lead in column 4.
+           See .info-actions in the sheet for why the five are peers.
+           Tour now dispatches like its neighbours: data-cmd="tour" runs
            COMMANDS.tour, which is startTour() — the document swap plus the
            spotlight chrome it drives. The title states the promise the swap
            itself keeps: your document is set aside whole and comes back
@@ -1781,6 +1833,9 @@
           </button>
           <button class="rb-mini" data-cmd="infoBug" title="How to report a problem, and what counts as one">
             <svg class="ic"><use href="#i-bug-report"/></svg>Bug report
+          </button>
+          <button class="rb-mini" data-cmd="infoApps" title="The other FORM apps — small single-file tools that extend your Office workflow">
+            <svg class="ic"><use href="#i-extension"/></svg>More apps
           </button>
           <button class="big info-lead" data-cmd="infoAbout" title="Version, licence and attribution">
             <svg class="ic"><use href="#i-copyright"/></svg><span>About</span>
@@ -2526,6 +2581,34 @@
       <p>What happens to a roster file when you open one is described under <b>Privacy</b>.</p>
       <p>The full account — how untrusted input is handled at each step, and a content security
          policy if you host a copy — is in <code>SECURITY.md</code> in the repository.</p>
+    </div>
+
+    <div class="info-doc" id="infoAppsDoc" hidden>
+      <p>Single-file apps that extend your Office workflow. Each one runs offline in your
+         browser — nothing leaves your machine — and exports as PNG, PDF and SVG.</p>
+      <ul class="apps-list">
+        <li class="apps-row">
+          <span class="apps-tile apps-tile-tierform" aria-hidden="true"><svg><use href="#i-logo"/></svg></span>
+          <span class="apps-text">
+            <span class="apps-name">TIERFORM <span class="apps-here">this app</span></span>
+            <span class="apps-tag">Team charts from a list of names and photos — as a pyramid, a tornado, a histogram, swimlanes, a hive or a matrix.</span>
+          </span>
+        </li>
+        <li class="apps-row">
+          <span class="apps-tile apps-tile-driftform" aria-hidden="true"><svg><use href="#i-driftform"/></svg></span>
+          <span class="apps-text">
+            <span class="apps-name"><a href="https://github.com/chrisjohe/DRIFTFORM" target="_blank" rel="noopener noreferrer">DRIFTFORM</a></span>
+            <span class="apps-tag">Word clouds from an evaluated word list — reproducible from a seed, so the same list gives the same cloud every time.</span>
+          </span>
+        </li>
+      </ul>
+      <p class="about-made">
+        <svg class="about-flag" viewBox="0 0 810 540" aria-hidden="true">
+          <path fill="#003399" d="M0 0H810V540H0Z"/>
+          <path fill="#FFCC00" d="M405 30L418.47 71.46L462.06 71.46L426.8 97.08L440.27 138.54L405 112.92L369.73 138.54L383.2 97.08L347.94 71.46L391.53 71.46ZM495 54.12L508.47 95.57L552.06 95.57L516.8 121.2L530.27 162.66L495 137.03L459.73 162.66L473.2 121.2L437.94 95.57L481.53 95.57ZM560.88 120L574.36 161.46L617.95 161.46L582.68 187.08L596.15 228.54L560.88 202.92L525.62 228.54L539.09 187.08L503.82 161.46L547.41 161.46ZM585 210L598.47 251.46L642.06 251.46L606.8 277.08L620.27 318.54L585 292.92L549.73 318.54L563.2 277.08L527.94 251.46L571.53 251.46ZM560.88 300L574.36 341.46L617.95 341.46L582.68 367.08L596.15 408.54L560.88 382.92L525.62 408.54L539.09 367.08L503.82 341.46L547.41 341.46ZM495 365.88L508.47 407.34L552.06 407.34L516.8 432.97L530.27 474.43L495 448.8L459.73 474.43L473.2 432.97L437.94 407.34L481.53 407.34ZM405 390L418.47 431.46L462.06 431.46L426.8 457.08L440.27 498.54L405 472.92L369.73 498.54L383.2 457.08L347.94 431.46L391.53 431.46ZM315 365.88L328.47 407.34L372.06 407.34L336.8 432.97L350.27 474.43L315 448.8L279.73 474.43L293.2 432.97L257.94 407.34L301.53 407.34ZM249.12 300L262.59 341.46L306.18 341.46L270.91 367.08L284.38 408.54L249.12 382.92L213.85 408.54L227.32 367.08L192.05 341.46L235.64 341.46ZM225 210L238.47 251.46L282.06 251.46L246.8 277.08L260.27 318.54L225 292.92L189.73 318.54L203.2 277.08L167.94 251.46L211.53 251.46ZM249.12 120L262.59 161.46L306.18 161.46L270.91 187.08L284.38 228.54L249.12 202.92L213.85 228.54L227.32 187.08L192.05 161.46L235.64 161.46ZM315 54.12L328.47 95.57L372.06 95.57L336.8 121.2L350.27 162.66L315 137.03L279.73 162.66L293.2 121.2L257.94 95.57L301.53 95.57Z"/>
+        </svg>
+        Designed and developed in Europe
+      </p>
     </div>
 
     <div class="info-doc" id="infoAboutDoc" hidden>
@@ -8323,18 +8406,21 @@ for(const [id, close] of [
   ["#groupModal",  ()=>closeGroupModal()],
 ]) $(id).querySelector(".modal-x").addEventListener("click", close);
 
-/* ---- the Info group's four dialogs ---------------------------------------
-   One dialog, four bodies, chosen by name. The bodies are static markup, so
+/* ---- the Info group's five dialogs ----------------------------------------
+   One dialog, five bodies, chosen by name. The bodies are static markup, so
    nothing here builds prose — this only picks which one is not hidden and what
    the title says. Read-only throughout: no command here touches state, which is
    why none of them goes near commit().
    "Bug report" is the first title here that is not one short word; .modal h3's
    26px right padding is what keeps it clear of the close X, and About's own
-   centred title states that padding on both sides for the same reason. */
+   centred title states that padding on both sides for the same reason.
+   "The FORM apps" is a second multi-word title and relies on the same h3
+   right padding. */
 const INFO_DOCS = {
   privacy: {title:"Privacy",     doc:"#infoPrivacyDoc"},
   tips:    {title:"Tips",        doc:"#infoTipsDoc"},
   bug:     {title:"Bug report",  doc:"#infoBugDoc"},
+  apps:    {title:"The FORM apps", doc:"#infoAppsDoc"},
   about:   {title:"About", doc:"#infoAboutDoc"}
 };
 function openInfo(name){
@@ -9299,6 +9385,7 @@ const COMMANDS = {
   infoPrivacy: ()=>openInfo("privacy"),
   infoTips:    ()=>openInfo("tips"),
   infoBug:     ()=>openInfo("bug"),
+  infoApps:    ()=>openInfo("apps"),
   infoAbout:   ()=>openInfo("about"),
   tour:        ()=>startTour(),
 

@@ -6158,6 +6158,7 @@ check(!/chipH/.test(SCRIPT), "no chipH — no geometry constant for an unused fe
   for(const [cmd, icon, label, kind] of [["infoTips",    "i-tips",       "Tips",       "mini"],
                                          ["infoPrivacy", "i-privacy",    "Privacy",    "mini"],
                                          ["infoBug",     "i-bug-report", "Bug report", "mini"],
+                                         ["infoApps",    "i-extension",  "More apps",  "mini"],
                                          ["infoAbout",   "i-copyright",  "About",      "info-lead"]]){
     const btn = new RegExp('<button class="([^"]*)"[^>]*data-cmd="' + cmd + '"[\\s\\S]{0,200}?</button>')
       .exec(pane);
@@ -6177,10 +6178,10 @@ check(!/chipH/.test(SCRIPT), "no chipH — no geometry constant for an unused fe
   }
   /* The group's shape, read off the group rather than off any one button.
      .rb-file's cells come in pairs — two half-height minis to a column, or one
-     full-height command spanning both — so four minis fill columns 1 and 2 and
-     About takes column 3. A grid-column pinned to 2 would be correct only
-     for exactly two minis, and would land silently on top of a third or
-     fourth instead of failing — which is why the count is asserted here,
+     full-height command spanning both — so five minis fill columns 1 through 3
+     and About takes column 4. A grid-column pinned to 3 would be correct only
+     for exactly four minis, and would land silently on top of a fifth
+     instead of failing — which is why the count is asserted here,
      not just the position. */
   {
     const css = /<style>([\s\S]*?)<\/style>/.exec(MARKUP);
@@ -6191,20 +6192,20 @@ check(!/chipH/.test(SCRIPT), "no chipH — no geometry constant for an unused fe
 
     check(/class="rb-file info-actions"/.test(pane),
       "the Info group uses the shared two-row ribbon grid");
-    check((group.match(/\brb-mini\b/g) || []).length === 4,
-      "four of its buttons are compact peers — got "
+    check((group.match(/\brb-mini\b/g) || []).length === 5,
+      "five of its buttons are compact peers — got "
       + (group.match(/\brb-mini\b/g) || []).length);
     check((group.match(/\binfo-lead\b/g) || []).length === 1
        && (group.match(/\bbig\b/g) || []).length === 1,
-      "and exactly one is the full-height lead — a second .big here is the fifth "
+      "and exactly one is the full-height lead — a second .big here is the sixth "
       + "half-slot going missing again");
     check(!/info-report/.test(MARKUP),
       "the info-report rule is gone from markup and sheet entirely — "
       + ".rb-lead2 stays, because that one is the Export group's");
-    /* Four minis occupy columns 1 and 2, so the lead's column is 3. A literal,
+    /* Five minis occupy columns 1 through 3, so the lead's column is 4. A literal,
        because the number is the whole claim. */
-    check(/\.info-actions > \.info-lead\{[^}]*grid-column:3;[^}]*grid-row:1 \/ span 2/.test(CSS),
-      "About spans both rows of column 3 — the column after the two the four minis fill");
+    check(/\.info-actions > \.info-lead\{[^}]*grid-column:4;[^}]*grid-row:1 \/ span 2/.test(CSS),
+      "About spans both rows of column 4 — the column after the three the five minis fill");
     check(/\.info-actions > \.info-lead\{[^}]*min-height:66px/.test(CSS),
       ".info-lead is the same 66px full height as other lead commands");
     check(!/\.info-actions > \.info-lead\{[^}]*min-width/.test(CSS),
@@ -6212,16 +6213,17 @@ check(!/chipH/.test(SCRIPT), "no chipH — no geometry constant for an unused fe
     check(/@media \(max-width:900px\)\{ \.info-actions > \.info-lead\{min-height:75px\}/.test(CSS),
       "including at the breakpoint where lead commands rise to 75px");
 
-    /* Column-major flow, so markup order IS the two columns read downwards. */
+    /* Column-major flow, so markup order IS the three columns read downwards. */
     const tourAt    = pane.indexOf('id="tourBtn"');
     const tipsAt    = pane.indexOf('data-cmd="infoTips"');
     const privacyAt = pane.indexOf('data-cmd="infoPrivacy"');
     const bugAt     = pane.indexOf('data-cmd="infoBug"');
+    const appsAt    = pane.indexOf('data-cmd="infoApps"');
     const aboutAt   = pane.indexOf('data-cmd="infoAbout"');
     check(tourAt > 0 && tourAt < tipsAt && tipsAt < privacyAt
-       && privacyAt < bugAt && bugAt < aboutAt,
+       && privacyAt < bugAt && bugAt < appsAt && appsAt < aboutAt,
       "and the grid flows down each column before moving right, so the markup order "
-      + "is Tour, Tips, Privacy, Bug report, About");
+      + "is Tour, Tips, Privacy, Bug report, More apps, About");
   }
 
   /* Tour is the group's fifth cell and now a live command, converted from the
@@ -6287,6 +6289,7 @@ check(!/chipH/.test(SCRIPT), "no chipH — no geometry constant for an unused fe
         ["privacy", "infoPrivacyDoc", "no network requests at all"],
         ["tips",    "infoTipsDoc",    "Shortcuts &amp; tips"],
         ["bug",     "infoBugDoc",     "strip any real names and photos first"],
+        ["apps",    "infoAppsDoc",    "reproducible from a seed"],
         ["about",   "infoAboutDoc",   "© 2026 Christian J. Heinze"]]){
     const at = modal.indexOf('id="' + id + '"');
     check(at > 0, "the " + name + " body is in the dialog markup");
@@ -6598,7 +6601,13 @@ check(!/chipH/.test(SCRIPT), "no chipH — no geometry constant for an unused fe
     check(aboutFlagRule && /width:18px/.test(aboutFlagRule[1]) && /height:12px/.test(aboutFlagRule[1]),
       "the flag stays a small single line at 18×12 (the flag's own 2:3 ratio) — got "
       + JSON.stringify(aboutFlagRule && aboutFlagRule[1]));
-    const aboutMadeRule = /\.about-made\{([^}]*)\}/.exec(CSS);
+    /* Anchored to a rule BOUNDARY (preceded by "}" or the start of the
+       sheet, then only whitespace before the selector) rather than a bare
+       substring search — #infoAppsDoc's own `#infoAppsDoc .about-made{…}`
+       override rule also contains the text ".about-made{" and would
+       otherwise be the first match, handing this check the wrong rule's
+       body entirely. */
+    const aboutMadeRule = /(?:^|\})\s*\.about-made\{([^}]*)\}/.exec(CSS);
     check(aboutMadeRule && /justify-content:center/.test(aboutMadeRule[1]),
       "…and the line it sits in is centred like every other element in About — got "
       + JSON.stringify(aboutMadeRule && aboutMadeRule[1]));
@@ -6688,12 +6697,239 @@ check(!/chipH/.test(SCRIPT), "no chipH — no geometry constant for an unused fe
       + "run under the close X");
   }
 
+  /* INFO_DOCS names the fifth document the same way it names Bug report and
+     About — a title and a doc selector, read straight from the script rather
+     than assumed from the button label. */
+  check(/apps:\s*\{title:"The FORM apps",\s*doc:"#infoAppsDoc"\}/.test(SCRIPT),
+    "INFO_DOCS titles the fifth document \"The FORM apps\"");
+
   /* Read-only: nothing in the Info tab may leave an undo step or a dirty flag. */
   {
     const open = /function openInfo\(name\)\{[\s\S]*?\n\}/.exec(SCRIPT);
     check(!!open, "openInfo() is readable");
     check(open && !/commit\(|edit\(|state\./.test(open[0]),
       "openInfo touches no state — showing a dialog is not a document change");
+  }
+}
+
+/* -------------------------------- 4l-bis. the FORM apps document */
+
+/* The fifth Info document lists TIERFORM's sister apps — today just
+   DRIFTFORM — as static markup like every other Info document. Its claims
+   are each answered by a second writer: README for TIERFORM's own tagline,
+   sprites/driftform-logo.svg for the mark's path data and brand colour, and
+   NOTICE for the attribution sentences, so a copy typed by hand here cannot
+   quietly drift from any of the three. */
+{
+  const modalAt = MARKUP.indexOf('id="infoModal"');
+  const modal   = MARKUP.slice(modalAt);
+  const at  = modal.indexOf('id="infoAppsDoc"');
+  const end = modal.indexOf('id="infoAboutDoc"', at);
+  const apps = at >= 0 && end > at ? modal.slice(at, end) : "";
+  check(apps.length > 0, "the FORM apps document is locatable in the dialog markup");
+
+  const css = /<style>([\s\S]*?)<\/style>/.exec(MARKUP);
+  const CSS = css ? css[1] : "";
+  const driftformSvg = readFile(here() + "sprites/driftform-logo.svg");
+
+  /* a) TIERFORM's own tagline is not retyped here — it is the same fragment
+     README states, read out of README rather than restated as a literal, so
+     the two can never describe two different sets of layouts. */
+  {
+    const readme = readFile(here() + "README.md").replace(/\*\*/g, "").replace(/\s+/g, " ");
+    const frag = (/as a (.*?) — and export/.exec(readme) || [])[1];
+    check(!!frag, "README still states the layout list in the shape this check reads");
+    const tierformRow = /<li class="apps-row">[\s\S]*?apps-tile-tierform[\s\S]*?<\/li>/.exec(apps);
+    check(!!frag && !!tierformRow && tierformRow[0].indexOf(frag) > 0,
+      "the TIERFORM row's .apps-tag states the same layout list README does — " + JSON.stringify(frag));
+  }
+
+  /* b) The shared intro states only what both apps hold today. DRIFTFORM has
+     not decided a CSV export, so the word must not appear anywhere in this
+     document — not even inside a claim scoped to TIERFORM alone, since nothing
+     in the markup distinguishes "shared" prose from "TIERFORM-only" prose to a
+     future editor. */
+  check(!/CSV/.test(apps),
+    "the FORM apps document states no CSV claim — the shared intro is only what both apps hold");
+
+  /* c) TIERFORM is not a link (it is the document already open); DRIFTFORM is,
+     and to exactly one place, with the same rel/target pattern the Bug report
+     advisory link uses. */
+  {
+    const tierformRow = /<li class="apps-row">[\s\S]*?apps-tile-tierform[\s\S]*?<\/li>/.exec(apps);
+    check(!!tierformRow && !/<a /.test(tierformRow[0]) && /this app/.test(tierformRow[0]),
+      "the TIERFORM row carries no link and names itself \"this app\"");
+    const driftformRow = /<li class="apps-row">[\s\S]*?apps-tile-driftform[\s\S]*?<\/li>/.exec(apps);
+    const links = driftformRow ? matchAll(/<a href="https:\/\/github\.com\/chrisjohe\/DRIFTFORM"[^>]*>/g, driftformRow[0]) : [];
+    check(links.length === 1, "the DRIFTFORM row carries exactly one link to the sister repository — found " + links.length);
+    check(links.length === 1 && /target="_blank" rel="noopener noreferrer"/.test(links[0][0]),
+      "…opened the same safe way the Bug report advisory link is");
+  }
+
+  /* d) #i-driftform's provenance: the ordered path data matches the source
+     file byte-for-byte (the same standard §2b holds every symbol to), it sits
+     below the PLACEHOLDER boundary among this project's own artwork, its
+     viewBox is the file's own canvas, and it carries no fill of its own so
+     currentColor decides. */
+  {
+    const placeholderAt = MARKUP.indexOf("<!-- PLACEHOLDER");
+    const symTag = /<symbol id="i-driftform"[^>]*>([\s\S]*?)<\/symbol>/.exec(MARKUP);
+    check(!!symTag, "#i-driftform is a symbol in the sprite");
+    const symIndex = symTag ? MARKUP.indexOf(symTag[0]) : -1;
+    check(placeholderAt >= 0 && symIndex > placeholderAt,
+      "#i-driftform sits below the PLACEHOLDER comment, among this project's own artwork");
+
+    const symD  = symTag ? matchAll(/\bd="([^"]+)"/g, symTag[1]).map(m => m[1]) : [];
+    const fileD = matchAll(/\bd="([^"]+)"/g, driftformSvg).map(m => m[1]);
+    check(symD.length > 0 && symD.length === fileD.length && symD.every((d, i) => d === fileD[i]),
+      "#i-driftform's ordered path data matches sprites/driftform-logo.svg in full — that file "
+      + "is the provenance record for the mark, not an approximation of it");
+
+    const fileW = (/\bwidth="(\d+)"/.exec(driftformSvg) || [])[1];
+    const fileH = (/\bheight="(\d+)"/.exec(driftformSvg) || [])[1];
+    const vb = (/<symbol id="i-driftform"[^>]*\bviewBox="([^"]+)"/.exec(MARKUP) || [])[1];
+    check(!!vb && !!fileW && !!fileH && vb === ("0 0 " + fileW + " " + fileH),
+      "#i-driftform declares the file's own canvas as its viewBox — got " + vb
+      + ", sprites/driftform-logo.svg is " + fileW + "x" + fileH);
+
+    check(!!symTag && !/\bfill="#/.test(symTag[0]),
+      "the sprite copy carries no fill of its own, so both tiles colour it through CSS");
+  }
+
+  /* e) The DRIFTFORM tile's colour is DRIFTFORM's own brand, a literal because
+     it names another product's identity rather than this app's — but the
+     literal is still checked against a second writer, the fill the source
+     file itself carries, rather than trusted on its own say-so. */
+  {
+    const fileFill = (/\bfill="(#[0-9A-Fa-f]{6})"/.exec(driftformSvg) || [])[1];
+    check(!!fileFill, "sprites/driftform-logo.svg states its own fill");
+    const tileHex = (/\.apps-tile-driftform\{background:(#[0-9A-Fa-f]{6})\}/.exec(CSS) || [])[1];
+    check(!!tileHex && !!fileFill && tileHex.toLowerCase() === fileFill.toLowerCase(),
+      "the DRIFTFORM tile's background matches the fill sprites/driftform-logo.svg carries — "
+      + "sheet says " + tileHex + ", file says " + fileFill);
+    check(/\.apps-tile-tierform\{background:var\(--brand\)\}/.test(CSS),
+      "the TIERFORM tile takes the app's own --brand token, not a literal");
+  }
+
+  /* e2) The intro-to-first-row gap AND the rows' left edge. Two simpler
+     places for the gap were tried and rejected, in order: .apps-intro (a
+     bare class, specificity 0,1,0) lost the cascade to
+     .info-doc p{margin:0 0 7px} (0,1,1) and silently painted 7px instead of
+     18px; a bare .apps-list{margin:…} would have repeated the identical bug
+     against .info-doc ul{margin:0;…}, also (0,1,1). The SAME rule's
+     padding-left:16px is the identical defeat on the other axis: a bare
+     .apps-list{padding:0} loses it too, and both rows read indented from
+     the intro's left edge until that padding moved into the id-scoped rule
+     alongside the margin. Both facts are checked here rather than assumed:
+     the second source for "a bare .apps-list would still lose" is
+     .info-doc ul's own margin:0/padding-left:16px, read out of the sheet,
+     not out of memory. #infoAppsDoc .apps-list is (1,1,0) — the id is what
+     actually outranks it on both properties. This was verified against a
+     real rendering engine (Chromium via Playwright, getComputedStyle +
+     getBoundingClientRect on the opened document) before landing on this
+     selector, not by specificity arithmetic alone. */
+  {
+    /* Comments stripped before every one of these regexes: this very
+       comment block quotes ".info-doc ul{margin:0;…}" and
+       "#infoAppsDoc .apps-list{margin:…}" in prose two paragraphs up, and a
+       raw (comment-including) scan would let a mutation to the REAL rule
+       hide behind that prose and stay green — caught by hand while building
+       this check, against the real rule alone. */
+    const cssNoComments = CSS.replace(/\/\*[\s\S]*?\*\//g, " ");
+    check(/\.info-doc ul\{margin:0;padding-left:16px\}/.test(cssNoComments),
+      ".info-doc ul still resets margin to 0 and sets padding-left:16px — the "
+      + "reason neither .apps-intro nor a bare .apps-list margin OR padding "
+      + "can be trusted to paint");
+    const idRule = /#infoAppsDoc \.apps-list\{margin:26px 0 4px;padding:0\}/;
+    check(idRule.test(cssNoComments),
+      "the intro-to-first-row space is 26px, stated on an id-scoped selector "
+      + "so it actually outranks .info-doc ul's margin:0 — a bare .apps-list "
+      + "rule at the same value would not");
+    check(idRule.test(cssNoComments),
+      "…and padding:0 sits in that same id-scoped rule, right after the "
+      + "margin — .info-doc ul's own padding-left:16px is the identical "
+      + "defeat on the other axis, and a bare .apps-list{padding:0} would "
+      + "leave both rows indented 16px from the intro's left edge");
+    const appsListBare = (/(?:^|\})\s*\.apps-list\{([^}]*)\}/.exec(cssNoComments) || [])[1];
+    check(!!appsListBare && !/margin|padding/.test(appsListBare),
+      "…and the bare .apps-list rule states no margin AND no padding of its "
+      + "own — either would never paint and would be dead code, the same "
+      + "defect .apps-intro had");
+    check(!/\.apps-intro\{/.test(cssNoComments) && !/class="[^"]*\bapps-intro\b[^"]*"/.test(MARKUP),
+      "the .apps-intro class and rule are both gone — a rule that never "
+      + "applies is dead code, and it never applied");
+  }
+
+  /* f) Both tiles reference their symbol through <use href="…">, written out
+     in full inside the document — the static sprite-use check elsewhere
+     covers hrefs generally, but not that these two specific tiles are wired
+     to these two specific symbols. */
+  check(apps.indexOf('<use href="#i-logo"/>') > 0,
+    "the TIERFORM tile draws #i-logo through <use>, written out in full");
+  check(apps.indexOf('<use href="#i-driftform"/>') > 0,
+    "the DRIFTFORM tile draws #i-driftform through <use>, written out in full");
+
+  /* g) NOTICE names the new symbol in the own-artwork sentence and carries the
+     DRIFTFORM trademark line — both literals, so a hand-edit that drops either
+     while leaving the icon count correct still fails. */
+  {
+    const notice = readFile(here() + "NOTICE");
+    check(/remaining two[\s\S]{0,200}#i-driftform/.test(notice.replace(/\s+/g, " ")),
+      "NOTICE's own-artwork sentence names #i-driftform alongside #i-logo");
+    check(notice.indexOf("DRIFTFORM and the DRIFTFORM logo are likewise trademarks of Christian J.") >= 0,
+      "and NOTICE carries the DRIFTFORM trademark acknowledgement");
+  }
+
+  /* h) The EU line closes #infoAppsDoc too, not just About — an identical
+     copy of .about-made. Generalised across the WHOLE file rather than
+     re-asserted per document, so a future third document that forgets the
+     line, or a stray extra copy dropped somewhere odd, both fail the same
+     way: the exact count is wrong, or one of the found blocks does not match
+     the provenance file / does not end in the Europe sentence. This
+     subsumes nothing from the About-only checks above (which additionally
+     pin About's own placement relative to .about-notices) — it is a second,
+     independent read of the same markup. */
+  {
+    const madeBlocks = matchAll(/<p class="about-made">[\s\S]*?<\/p>/g, MARKUP);
+    check(madeBlocks.length === 2,
+      "exactly two .about-made blocks exist in the whole file — one per document that "
+      + "closes on the EU line — found " + madeBlocks.length);
+
+    const extractPathsH = svg => {
+      const re = /<path[^>]*\bfill="([^"]*)"[^>]*\bd="([^"]*)"/g;
+      const out = [];
+      let m;
+      while((m = re.exec(svg || ""))) out.push([m[1], m[2]]);
+      return out;
+    };
+    const euH = readFile(here() + "sprites/eu-flag.svg");
+    const euPathsH = extractPathsH(euH);
+    madeBlocks.forEach((m, i) => {
+      const block = m[0];
+      const flagSvg = (/<svg class="about-flag"[\s\S]*?<\/svg>/.exec(block) || [""])[0];
+      const flagPaths = extractPathsH(flagSvg);
+      check(flagPaths.length > 0 && flagPaths.length === euPathsH.length
+         && flagPaths.every((p, j) => (euPathsH[j] || [])[0] === p[0] && (euPathsH[j] || [])[1] === p[1]),
+        "about-made block #" + (i + 1) + "'s flag matches sprites/eu-flag.svg in full, path by "
+        + "path, fill and d — every copy answers to the same provenance file, not just the first");
+      check(/<\/svg>\s*Designed and developed in Europe\s*<\/p>$/.test(block),
+        "about-made block #" + (i + 1) + " closes with the Europe sentence right after the flag");
+    });
+
+    /* And specifically: #infoAppsDoc's own copy is its LAST child — nothing
+       drawn after the flag line before the document's own closing </div>.
+       Mirrors the afterMade check About gets above, but against `apps`
+       rather than `about`, and testing only that a close-div follows
+       (apps' own slice runs a little past its true end, into the next
+       document's opening tag, so anchoring the whole remainder would be
+       wrong here in a way it is not for `about`). */
+    const appsMadeAt = apps.indexOf('<p class="about-made">');
+    check(appsMadeAt > 0, "the FORM apps document carries its own about-made line");
+    const appsMadeBlock = (/<p class="about-made">[\s\S]*?<\/p>/.exec(apps) || [""])[0];
+    const appsAfterMade = appsMadeAt >= 0 ? apps.slice(appsMadeAt + appsMadeBlock.length) : "";
+    check(/^\s*<\/div>/.test(appsAfterMade),
+      "…and is the last content in #infoAppsDoc — the next thing after it is the document's "
+      + "own closing </div> — got " + JSON.stringify(appsAfterMade.slice(0, 40)));
   }
 }
 
@@ -8229,8 +8465,8 @@ check(!/chipH/.test(SCRIPT), "no chipH — no geometry constant for an unused fe
 {
   const all = uniq(matchAll(/data-cmd="([A-Za-z]+)"/g, MARKUP).map(m => m[1])).sort();
   const want = ["accentSwatch", "addGrade", "addPeople", "clearGrades", "clearRoster", "copyPng",
-                "exportCsv", "exportPdf", "exportPng", "exportSvg", "groups", "importCsv", "infoAbout", "infoBug",
-                "infoPrivacy", "infoTips",
+                "exportCsv", "exportPdf", "exportPng", "exportSvg", "groups", "importCsv", "infoAbout", "infoApps",
+                "infoBug", "infoPrivacy", "infoTips",
                 "new", "open", "pasteList", "redo", "save", "saveAs",
                 "toggleRoster", "tour",
                 "undo"];
