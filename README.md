@@ -16,6 +16,13 @@ Open it and it works.
 [Download `tierform_app.html`](https://github.com/chrisjohe/TIERFORM/releases/latest/download/tierform_app.html)
 and double-click it. That is the whole setup.
 
+Or [open it at chrisjohe.github.io/TIERFORM](https://chrisjohe.github.io/TIERFORM/)
+without downloading anything. The hosted copy is byte-for-byte the file the
+release link gives you, and once the page has loaded it behaves exactly as it
+does from disk: no requests of its own, nothing uploaded, no account. Serving
+it has one visible effect — **Copy PNG** works, which it cannot from a
+`file://` page.
+
 The ribbon has three tabs — **Start**, **Structure** and **Design** — and a
 **Roster** panel down the left that lists everyone on the chart. The panel can
 be hidden; a slim rail at the left edge brings it back.
@@ -162,8 +169,9 @@ everything works that way with one exception:
 > **Copy PNG** needs the browser's asynchronous clipboard API, which Safari
 > and Chrome do not grant to a page opened from a file. Where it is
 > unavailable the button is disabled and says so — use **Export ▸ Export
-> PNG**, which writes the file to disk instead, or serve the file over http
-> and Copy PNG comes back.
+> PNG**, which writes the file to disk instead, or open the
+> [hosted copy](https://chrisjohe.github.io/TIERFORM/), where Copy PNG comes
+> back.
 
 Copy PNG renders at 150 dpi for pasting into a document; Export PNG and PDF
 render at 300 dpi for printing.
