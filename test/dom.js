@@ -6339,7 +6339,7 @@ check(!/chipH/.test(SCRIPT), "no chipH — no geometry constant for an unused fe
     const at = modal.indexOf('id="infoAboutDoc"');
     const end = modal.indexOf('<div class="btnrow modal-foot">', at);
     const about = at >= 0 && end > at ? modal.slice(at, end) : "";
-    const repo = 'https://github.com/chrisjohe/tierform';
+    const repo = 'https://github.com/chrisjohe/TIERFORM';
     const css = /<style>([\s\S]*?)<\/style>/.exec(MARKUP);
     const CSS = css ? css[1] : "";
     const logo = readFile(here() + "sprites/logo.svg");
@@ -6613,6 +6613,39 @@ check(!/chipH/.test(SCRIPT), "no chipH — no geometry constant for an unused fe
       + JSON.stringify(aboutMadeRule && aboutMadeRule[1]));
   }
 
+  /* A class check over every chrisjohe repository link in the app, not just
+     the two sites the literal checks above happen to name. The two literal
+     checks still earn their place — they pin more than the URL, anchor
+     attributes and an exactly-one-copy count the class check below does not
+     — but they only ever guarded the sites that existed when they were
+     written. This one reads the raw file text (so the source header comment
+     is included, not just the rendered markup), extracts every such URL's
+     repository segment, and holds each one to the project's own two
+     canonical marks. */
+  {
+    const repoLinks = matchAll(/https:\/\/github\.com\/chrisjohe\/([^\/"'\s<]+)/g, HTML);
+    check(repoLinks.length >= 3,
+      "at least three chrisjohe repository URLs are named in the app — found "
+      + repoLinks.length + " (a regex silently matching nothing would otherwise still pass)");
+    const badSegments = repoLinks.map(m => m[1]).filter(seg => seg !== "TIERFORM" && seg !== "DRIFTFORM");
+    check(badSegments.length === 0,
+      "the app names a chrisjohe repository only by its canonical uppercase mark, TIERFORM "
+      + "or DRIFTFORM — found a link naming: " + JSON.stringify(badSegments));
+  }
+
+  /* The source header comment and NOTICE are two independent writers of the
+     same repository URL, and CLAUDE.md requires them to stay in sync. Each is
+     read from its own file and compared to the OTHER, not to a literal typed
+     here — a literal would only prove one of the two files matches this test,
+     not that the two files still agree with each other. */
+  {
+    const headerUrl = (/TIERFORM — (https:\/\/github\.com\/chrisjohe\/\S+)/.exec(HTML) || [])[1];
+    const noticeUrl = (/https:\/\/github\.com\/chrisjohe\/\S+/.exec(readFile(here() + "NOTICE")) || [])[0];
+    check(!!headerUrl && !!noticeUrl && headerUrl === noticeUrl,
+      "the source header comment's repository URL and NOTICE's own agree — header says "
+      + JSON.stringify(headerUrl) + ", NOTICE says " + JSON.stringify(noticeUrl));
+  }
+
   /* The Bug report document exists because the app travels as one file: someone
      who was emailed it has no repository, so the reporting route and the one
      instruction that matters have to be in here. Two things are pinned.
@@ -6637,7 +6670,7 @@ check(!/chipH/.test(SCRIPT), "no chipH — no geometry constant for an unused fe
     const at   = modal.indexOf('id="infoBugDoc"');
     const end  = modal.indexOf('id="infoAboutDoc"', at);
     const bug  = at >= 0 && end > at ? modal.slice(at, end) : "";
-    const advisory = "https://github.com/chrisjohe/tierform/security/advisories/new";
+    const advisory = "https://github.com/chrisjohe/TIERFORM/security/advisories/new";
     const link = /<a class="info-link"[\s\S]*?<\/a>/.exec(bug);
 
     check(!!link, "the Bug report document carries the advisory link");

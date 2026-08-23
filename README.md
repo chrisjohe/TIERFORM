@@ -13,7 +13,7 @@ Open it and it works.
 
 ## Using it
 
-[Download `tierform_app.html`](https://github.com/chrisjohe/tierform/releases/latest/download/tierform_app.html)
+[Download `tierform_app.html`](https://github.com/chrisjohe/TIERFORM/releases/latest/download/tierform_app.html)
 and double-click it. That is the whole setup.
 
 The ribbon has three tabs — **Start**, **Structure** and **Design** — and a

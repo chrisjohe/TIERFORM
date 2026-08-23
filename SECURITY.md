@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Open a [private security advisory](https://github.com/chrisjohe/tierform/security/advisories/new)
+Open a [private security advisory](https://github.com/chrisjohe/TIERFORM/security/advisories/new)
 on GitHub — the **Security** tab, then **Report a vulnerability**. The report
 stays private between you and the maintainer until a fix is published, and it
 needs no email address from either of us.
