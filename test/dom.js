@@ -4109,7 +4109,8 @@ check(!/chipH/.test(SCRIPT), "no chipH — no geometry constant for an unused fe
        already lives in (proven above), rather than a bare .test() that
        "@media (max-width:900px)…somewhere later…min-height:75px" would also
        satisfy from an unrelated breakpoint elsewhere in the sheet — .style-grid,
-       .info-lead and .g-chip-face all have their own 900px/75px rules. */
+       .rb-lead2, .rb-lead3 and .g-chip-face all have their own 900px/75px
+       rules. */
     const mediaStart = CSS.indexOf(
       "@media (max-width:900px){\n    .rb-file > .rb-lead,\n"
       + "    .rb-file > .rb-lead > .big{min-height:75px}");
@@ -6159,7 +6160,7 @@ check(!/chipH/.test(SCRIPT), "no chipH — no geometry constant for an unused fe
                                          ["infoPrivacy", "i-privacy",    "Privacy",    "mini"],
                                          ["infoBug",     "i-bug-report", "Bug report", "mini"],
                                          ["infoApps",    "i-extension",  "More apps",  "mini"],
-                                         ["infoAbout",   "i-copyright",  "About",      "info-lead"]]){
+                                         ["infoAbout",   "i-copyright",  "About",      "rb-lead3"]]){
     const btn = new RegExp('<button class="([^"]*)"[^>]*data-cmd="' + cmd + '"[\\s\\S]{0,200}?</button>')
       .exec(pane);
     check(!!btn, cmd + " is a button in Start's Info group");
@@ -6178,11 +6179,14 @@ check(!/chipH/.test(SCRIPT), "no chipH — no geometry constant for an unused fe
   }
   /* The group's shape, read off the group rather than off any one button.
      .rb-file's cells come in pairs — two half-height minis to a column, or one
-     full-height command spanning both — so five minis fill columns 1 through 3
-     and About takes column 4. A grid-column pinned to 3 would be correct only
-     for exactly four minis, and would land silently on top of a fifth
-     instead of failing — which is why the count is asserted here,
-     not just the position. */
+     full-height command spanning both — so four minis auto-place into columns
+     1 and 2, About is explicitly pinned to column 3 (the same .rb-lead3 slot
+     Structure's Group command already sits on) and More apps is explicitly
+     pinned to column 4. Those two literals only describe this layout while
+     exactly four minis auto-place ahead of them — a fifth would auto-flow
+     past both explicit placements into a cell nobody chose, and a rule that
+     names a column has no way to notice that happened. So the mini count is
+     asserted here too, not just the two positions. */
   {
     const css = /<style>([\s\S]*?)<\/style>/.exec(MARKUP);
     const CSS = css ? css[1] : "";
@@ -6195,35 +6199,51 @@ check(!/chipH/.test(SCRIPT), "no chipH — no geometry constant for an unused fe
     check((group.match(/\brb-mini\b/g) || []).length === 5,
       "five of its buttons are compact peers — got "
       + (group.match(/\brb-mini\b/g) || []).length);
-    check((group.match(/\binfo-lead\b/g) || []).length === 1
+    check((group.match(/\brb-lead3\b/g) || []).length === 1
        && (group.match(/\bbig\b/g) || []).length === 1,
       "and exactly one is the full-height lead — a second .big here is the sixth "
       + "half-slot going missing again");
     check(!/info-report/.test(MARKUP),
       "the info-report rule is gone from markup and sheet entirely — "
       + ".rb-lead2 stays, because that one is the Export group's");
-    /* Five minis occupy columns 1 through 3, so the lead's column is 4. A literal,
-       because the number is the whole claim. */
-    check(/\.info-actions > \.info-lead\{[^}]*grid-column:4;[^}]*grid-row:1 \/ span 2/.test(CSS),
-      "About spans both rows of column 4 — the column after the three the five minis fill");
-    check(/\.info-actions > \.info-lead\{[^}]*min-height:66px/.test(CSS),
-      ".info-lead is the same 66px full height as other lead commands");
-    check(!/\.info-actions > \.info-lead\{[^}]*min-width/.test(CSS),
-      ".info-lead states no min-width of its own — its width is button.big's shared policy, so About stays as wide as every other lead command");
-    check(/@media \(max-width:900px\)\{ \.info-actions > \.info-lead\{min-height:75px\}/.test(CSS),
+    check(!/info-lead/.test(MARKUP),
+      "the info-lead rule and class are gone from markup and sheet entirely — "
+      + ".rb-lead3 stays, because About now uses the same shared class "
+      + "Structure's Group command does");
+
+    /* About carries the class that used to belong only to Structure's Group
+       command, so its geometry is now a claim about .rb-lead3, and the
+       literal 3 is the whole claim — the same way the literal 4 was the
+       whole claim for the rule this replaced. */
+    check(/\bbig rb-lead3\b/.test(group),
+      "About carries the shared .rb-lead3 class rather than a class of its own");
+    check(/\.rb-file > \.rb-lead3\{grid-column:3;grid-row:1 \/ span 2\}/.test(CSS),
+      "and .rb-lead3 spans both rows of column 3 in the sheet");
+    check(/\.rb-file > \.rb-lead3,\s*\.rb-file > \.rb-lead3 > \.big\{height:auto;min-height:66px\}/.test(CSS),
+      "so About is the same 66px full height as every other lead command");
+    check(!/\.rb-file > \.rb-lead3\{[^}]*min-width/.test(CSS)
+       && !/\.rb-file > \.rb-lead3 > \.big\{[^}]*min-width/.test(CSS),
+      ".rb-lead3 states no min-width of its own, so About stays as wide as button.big's shared policy");
+    check(/@media \(max-width:900px\)\{\s*\.rb-file > \.rb-lead3,\s*\.rb-file > \.rb-lead3 > \.big\{min-height:75px\}/.test(CSS),
       "including at the breakpoint where lead commands rise to 75px");
 
-    /* Column-major flow, so markup order IS the three columns read downwards. */
+    check(/\.info-actions > \.info-apps\{grid-column:4;grid-row:1\}/.test(CSS),
+      "More apps is pinned to column 4's first row");
+    check(!/\.info-actions > \.info-apps\{[^}]*height/.test(CSS),
+      "More apps states no height of its own, so it stays the one-row compact "
+      + "button it already was rather than growing to fill its column");
+
+    /* Column-major flow, so markup order IS the four columns read downwards. */
     const tourAt    = pane.indexOf('id="tourBtn"');
     const tipsAt    = pane.indexOf('data-cmd="infoTips"');
     const privacyAt = pane.indexOf('data-cmd="infoPrivacy"');
     const bugAt     = pane.indexOf('data-cmd="infoBug"');
-    const appsAt    = pane.indexOf('data-cmd="infoApps"');
     const aboutAt   = pane.indexOf('data-cmd="infoAbout"');
+    const appsAt    = pane.indexOf('data-cmd="infoApps"');
     check(tourAt > 0 && tourAt < tipsAt && tipsAt < privacyAt
-       && privacyAt < bugAt && bugAt < appsAt && appsAt < aboutAt,
+       && privacyAt < bugAt && bugAt < aboutAt && aboutAt < appsAt,
       "and the grid flows down each column before moving right, so the markup order "
-      + "is Tour, Tips, Privacy, Bug report, More apps, About");
+      + "is Tour, Tips, Privacy, Bug report, About, More apps");
   }
 
   /* Tour is the group's fifth cell and now a live command, converted from the

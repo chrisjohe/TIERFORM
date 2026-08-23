@@ -589,14 +589,15 @@
      it is the group's identity, not because it is the one most reached for.
 
      .rb-file's cells come in pairs: two half-height minis to a column, or one
-     full-height command spanning both. So five minis fill columns 1 through 3
-     top to bottom (grid-auto-flow:column), and About takes column 4. .rb-lead2
-     stays — that is the Export group's, for two genuine peers, and this group
-     has none. */
-  .info-actions > .info-lead{
-    grid-column:4;grid-row:1 / span 2;height:auto;min-height:66px;
-  }
-  @media (max-width:900px){ .info-actions > .info-lead{min-height:75px} }
+     full-height command spanning both. Four of the five fill columns 1 and 2
+     top to bottom (grid-auto-flow:column), and About takes column 3 — the
+     same slot the Structure tab's Group command sits in, so About takes its
+     geometry from the shared .rb-lead3 rule rather than a private rule that
+     would just be a second writer of the same claim. The fifth, More apps,
+     sits alone in column 4's first row, still a plain .rb-mini, its cell
+     beneath left empty. .rb-lead2 stays — that is the Export group's, for
+     two genuine peers, and this group has none. */
+  .info-actions > .info-apps{grid-column:4;grid-row:1}
 
   /* the prose the buttons open — dialog width, not ribbon width, so it is read
      at a normal size instead of the 11px four columns forced */
@@ -1808,10 +1809,11 @@
         <div class="lbl">People</div>
       </div>
       <input type="file" id="fileSwap" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden>
-      <!-- Five one-row commands filling columns 1 through 3 — the grid flows
-           down a column before moving right, so the markup order is Tour,
-           Tips, Privacy, Bug report, More apps — and About as the
-           full-height lead in column 4.
+      <!-- Five one-row commands, four of them filling columns 1 and 2 — the
+           grid flows down a column before moving right, so the markup order
+           is Tour, Tips, Privacy, Bug report — then About as the full-height
+           lead in column 3, and the fifth, More apps, alone in column 4's
+           first row.
            See .info-actions in the sheet for why the five are peers.
            Tour now dispatches like its neighbours: data-cmd="tour" runs
            COMMANDS.tour, which is startTour() — the document swap plus the
@@ -1834,11 +1836,11 @@
           <button class="rb-mini" data-cmd="infoBug" title="How to report a problem, and what counts as one">
             <svg class="ic"><use href="#i-bug-report"/></svg>Bug report
           </button>
-          <button class="rb-mini" data-cmd="infoApps" title="The other FORM apps — small single-file tools that extend your Office workflow">
-            <svg class="ic"><use href="#i-extension"/></svg>More apps
-          </button>
-          <button class="big info-lead" data-cmd="infoAbout" title="Version, licence and attribution">
+          <button class="big rb-lead3" data-cmd="infoAbout" title="Version, licence and attribution">
             <svg class="ic"><use href="#i-copyright"/></svg><span>About</span>
+          </button>
+          <button class="rb-mini info-apps" data-cmd="infoApps" title="The other FORM apps — small single-file tools that extend your Office workflow">
+            <svg class="ic"><use href="#i-extension"/></svg>More apps
           </button>
         </div>
         <div class="lbl">Info</div>
