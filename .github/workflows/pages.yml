@@ -1,0 +1,101 @@
+# Publishes TIERFORM to GitHub Pages.
+#
+# The deployed page IS the app, byte for byte. TIERFORM is one self-contained
+# HTML file with no build step, and hosting must not quietly become one: the
+# job copies the file and verifies the copy against its source rather than
+# transforming it. index.html and tierform_app.html are the same bytes, so a
+# visitor who opens the site and a visitor who downloads the release are
+# looking at the same program.
+#
+# Hosting it over https is not only convenience. Copy PNG needs the browser's
+# asynchronous clipboard API, which Safari and Chrome withhold from a page
+# opened as a file — served, that command comes back.
+#
+# No Content-Security-Policy is set here. GitHub Pages cannot serve custom
+# headers, and the policy SECURITY.md documents is a header policy. A <meta>
+# equivalent would have to permit 'unsafe-inline' for both script and style,
+# since the app is one inline script and one inline stylesheet, and it would
+# make the hosted file differ from the released one. That trade is a decision
+# of its own, with a browser check of its own, and is deliberately not made
+# in passing here.
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, and a queued one is not cancelled: the last push
+# should be what ends up live, not whichever run happened to survive.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      # Node 24 is what the suites are developed against locally. They also run
+      # under JavaScriptCore, and that dual-runtime property is deliberate — but
+      # CI picks one, and it picks the fast one.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # Five separate steps on purpose: a red run names the suite in its own
+      # line rather than in the middle of a combined log.
+      - name: Geometry suite
+        run: node test/harness.js
+      - name: DOM wiring suite
+        run: node test/dom.js
+      - name: Document model suite
+        run: node test/document.js
+      - name: Fixtures suite
+        run: node test/fixtures.js
+      - name: Import suite
+        run: node test/import.js
+
+      - name: Assemble the site
+        run: |
+          mkdir -p _site
+          cp tierform_app.html _site/tierform_app.html
+          cp tierform_app.html _site/index.html
+
+      # The claim this workflow makes in its own header, checked rather than
+      # trusted. If a copy step ever grows a transformation, this fails here
+      # instead of shipping a hosted build nobody compared against the release.
+      - name: Verify the deployed file is the repository's file, byte for byte
+        run: |
+          cmp tierform_app.html _site/index.html
+          cmp tierform_app.html _site/tierform_app.html
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload the artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
