@@ -1,23 +1,38 @@
 # Publishes TIERFORM to GitHub Pages.
 #
-# The deployed page IS the app, byte for byte. TIERFORM is one self-contained
-# HTML file with no build step, and hosting must not quietly become one: the
-# job copies the file and verifies the copy against its source rather than
-# transforming it. index.html and tierform_app.html are the same bytes, so a
-# visitor who opens the site and a visitor who downloads the release are
-# looking at the same program.
+# The deployed page is the app, plus exactly one line. TIERFORM is one
+# self-contained HTML file with no build step, and hosting must not quietly
+# become one — so the only transformation this job is allowed to make is the
+# Content-Security-Policy meta element below, and the verification step proves
+# that by removing it again and comparing what is left, byte for byte, against
+# the file in the repository. If a step ever grows a second transformation, it
+# fails here rather than shipping a hosted build nobody compared against the
+# release.
 #
-# Hosting it over https is not only convenience. Copy PNG needs the browser's
-# asynchronous clipboard API, which Safari and Chrome withhold from a page
-# opened as a file — served, that command comes back.
+# Why the policy is a <meta> element and not a header: GitHub Pages cannot
+# serve custom headers, and the header policy SECURITY.md documents therefore
+# cannot be applied here. What a meta element can still carry is the directive
+# SECURITY.md calls the one that matters most — connect-src 'none', which turns
+# the app's no-network promise into something the browser enforces rather than
+# something a reader has to take on trust. frame-ancestors, sandbox and
+# report-uri are ignored in a meta element and are deliberately not written
+# here; a directive that does nothing is worse than an absent one, because it
+# reads as protection.
 #
-# No Content-Security-Policy is set here. GitHub Pages cannot serve custom
-# headers, and the policy SECURITY.md documents is a header policy. A <meta>
-# equivalent would have to permit 'unsafe-inline' for both script and style,
-# since the app is one inline script and one inline stylesheet, and it would
-# make the hosted file differ from the released one. That trade is a decision
-# of its own, with a browser check of its own, and is deliberately not made
-# in passing here.
+# 'unsafe-inline' is unavoidable for script and style: the app IS one inline
+# script and two inline stylesheets. 'unsafe-eval' is NOT here and must never
+# be — the app contains no eval, no Function constructor, no Worker and no
+# WebAssembly, and if that ever changes the answer is to keep the policy and
+# fix the app.
+#
+# The local file still carries no CSP, deliberately, and CLAUDE.md says why.
+# This policy exists only in the hosted copy, injected here.
+#
+# The one path no test suite can reach is the download helper, which hands an
+# object URL to an <a download>: every export — PNG, PDF, SVG, CSV — goes
+# through it. CSP fetch directives do not govern that navigation today, but
+# "today" is not an assurance, so test/MANUAL.md carries a Hosted copy
+# checklist to be walked on the live URL after a policy change.
 
 name: Deploy to GitHub Pages
 
@@ -36,6 +51,12 @@ permissions:
 concurrency:
   group: pages
   cancel-in-progress: false
+
+# Written once. The injection step builds the meta element from it and the
+# verification step rebuilds the same element to look for — so the policy that
+# ships and the policy that is checked cannot describe different things.
+env:
+  CSP: "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'"
 
 jobs:
   build:
@@ -65,19 +86,55 @@ jobs:
       - name: Import suite
         run: node test/import.js
 
-      - name: Assemble the site
+      # The policy goes immediately after the charset declaration, which must
+      # stay inside the document's first 1024 bytes and so cannot be displaced.
+      # Every precondition is asserted rather than assumed: one anchor, and no
+      # CSP already present — a policy that had crept into the repository file
+      # would mean this workflow is no longer the only writer of one.
+      - name: Assemble the site, with the hosted copy's policy
         run: |
-          mkdir -p _site
-          cp tierform_app.html _site/tierform_app.html
-          cp tierform_app.html _site/index.html
+          node - <<'NODE'
+          const fs = require("fs");
+          const src = fs.readFileSync("tierform_app.html", "utf8");
+          const anchor = '<meta charset="utf-8">\n';
+
+          const anchors = src.split(anchor).length - 1;
+          if (anchors !== 1) throw new Error("expected exactly one charset anchor, found " + anchors);
+          if (src.includes("Content-Security-Policy"))
+            throw new Error("the repository file already carries a CSP — this workflow is no longer its only writer");
+
+          const meta = '<meta http-equiv="Content-Security-Policy" content="' + process.env.CSP + '">\n';
+          const out = src.replace(anchor, anchor + meta);
+          if (out.length !== src.length + meta.length) throw new Error("injection changed more than it added");
+
+          fs.mkdirSync("_site", { recursive: true });
+          fs.writeFileSync("_site/index.html", out);
+          fs.writeFileSync("_site/tierform_app.html", out);
+          console.log("injected: " + meta.trim());
+          NODE
 
       # The claim this workflow makes in its own header, checked rather than
-      # trusted. If a copy step ever grows a transformation, this fails here
-      # instead of shipping a hosted build nobody compared against the release.
-      - name: Verify the deployed file is the repository's file, byte for byte
+      # trusted — and checked three ways, because each answers a different
+      # question. That the policy shipped is the policy declared above; that
+      # removing it leaves the repository's file byte for byte; and that the
+      # difference is one added line and nothing removed, which is the claim a
+      # reader of the header actually cares about.
+      - name: Verify the deployed file is the repository's file plus one known line
         run: |
-          cmp tierform_app.html _site/index.html
-          cmp tierform_app.html _site/tierform_app.html
+          META="<meta http-equiv=\"Content-Security-Policy\" content=\"$CSP\">"
+          for f in _site/index.html _site/tierform_app.html; do
+            grep -Fqx "$META" "$f" \
+              || { echo "::error::$f does not carry the declared policy"; exit 1; }
+            grep -vFx "$META" "$f" > stripped.html
+            cmp tierform_app.html stripped.html \
+              || { echo "::error::$f differs from the repository file by more than the policy"; exit 1; }
+            added=$(diff tierform_app.html "$f" | grep -c '^>' || true)
+            removed=$(diff tierform_app.html "$f" | grep -c '^<' || true)
+            [ "$added" = "1" ] && [ "$removed" = "0" ] \
+              || { echo "::error::$f: expected 1 added and 0 removed lines, got $added added and $removed removed"; exit 1; }
+            echo "$f: the repository's file plus exactly one line, and that line is the policy"
+            rm -f stripped.html
+          done
 
       - name: Configure Pages
         uses: actions/configure-pages@v5

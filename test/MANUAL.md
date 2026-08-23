@@ -894,6 +894,59 @@ And the SVG in its real destinations:
 - [ ] PowerPoint (Windows and macOS) — imports, stays vector, text is selectable.
 - [ ] Keynote — imports and scales without rasterising.
 
+## Hosted copy
+
+<https://chrisjohe.github.io/TIERFORM/> is the same file, served rather than
+downloaded, plus exactly one line: a `<meta>` Content-Security-Policy the
+Pages workflow injects. The workflow proves the *plus exactly one line* half on
+every deploy — it strips the policy again and compares what is left against
+`tierform_app.html` byte for byte, and counts the diff at one added line and
+none removed. What nothing automated can prove is the half that matters here:
+that the app still **works** under the policy. No suite loads a page, so no
+suite can see a directive refuse a resource.
+
+The policy:
+
+```
+default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline';
+img-src data:; font-src data:; connect-src 'none'; form-action 'none';
+base-uri 'none'; object-src 'none'
+```
+
+The one path genuinely at risk is the download helper: it hands an object URL
+to an `<a download>`, and **every** export — PNG, PDF, SVG, CSV — goes through
+that single site. CSP fetch directives do not govern that navigation today, but
+today is not an assurance, which is why this list exists. Walk it on the live
+URL with the console open — a violation names its directive there, loudly.
+
+- [ ] The page loads and draws a chart, console clean: **zero** CSP violations
+      at rest.
+- [ ] Export PNG, Export PDF, Export SVG and Export CSV each write a file, and
+      none logs a violation. This is the download helper, four times.
+- [ ] **Copy PNG** works. It is the one command hosting adds, and the reason
+      README points people here at all.
+- [ ] Drop a photo, and open a roster file that carries photos: avatars appear.
+      That is `img-src data:` doing its job rather than blocking.
+- [ ] Text draws in Open Sans, not a fallback — the embedded font is a
+      `data:font/woff2` URI and `font-src data:` is what permits it.
+- [ ] The tab icon shows. The favicon is a `data:image/svg+xml` URI and is
+      governed by `img-src`, so it is a live check of that directive too.
+- [ ] The Info dialogs' external links still open in a new tab. Top-level
+      navigation is not a fetch and must not be affected.
+- [ ] Network panel: after the document has loaded, editing, adding photos and
+      exporting produce **zero** requests — the same claim the `file://` run
+      makes, now enforced by `connect-src 'none'` instead of promised.
+
+| | Loads | PNG | Copy PNG | PDF | SVG | CSV | Console clean |
+|---|---|---|---|---|---|---|---|
+| Safari (macOS) | | | | | | | |
+| Firefox (macOS) | | | | | | | |
+| Chrome / Edge (macOS) | | | | | | | |
+
+If a box fails, the fix is the workflow and never the app: `tierform_app.html`
+is not touched by any of this, and reverting one workflow commit restores the
+previous hosted build without a byte of the program moving.
+
 ## Dark mode
 
 There is no in-app dark-mode control by design — a toggle has nowhere to
