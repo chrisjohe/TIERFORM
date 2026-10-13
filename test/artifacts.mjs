@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
+import {htmlTokens,inlineContents,comparableMarkup} from './html.cjs';
 
 const read=name=>fs.readFile(name,'utf8');
 const offline=await read('tierform_app.html');
@@ -10,12 +11,14 @@ const js=await read('_site/assets/app.js');
 const css=await read('_site/assets/app.css');
 const fontCSS=await read('_site/assets/fonts.css');
 const font=await fs.readFile('_site/assets/OpenSans.woff2');
+const offlineTokens=htmlTokens(offline);
+const hostedTokens=htmlTokens(hosted);
 let passed=0;
 function test(name,run){if(process.env.TIERFORM_TEST_FILTER&&name!==process.env.TIERFORM_TEST_FILTER)return;try{run();passed++;}catch(error){throw new Error(name+': '+error.message,{cause:error});}}
 
 test('offline script and styling match the hosted build',()=>{
-  const scripts=[...offline.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m=>m[1].trim());
-  const styles=[...offline.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map(m=>m[1].trim());
+  const scripts=inlineContents(offlineTokens,'script');
+  const styles=inlineContents(offlineTokens,'style');
   assert.deepEqual([scripts,styles],[ [js.trim()], [css.trim(),fontCSS.replace('./OpenSans.woff2','data:font/woff2;base64,'+font.toString('base64')).trim()] ]);
 });
 test('hosted resources resolve under a GitHub project path',()=>{
@@ -31,8 +34,23 @@ test('portable output has no external assets or hosted policy',()=>{
   assert.deepEqual([references.filter(v=>!v.startsWith('data:')),offline.includes('Content-Security-Policy')],[[],false]);
 });
 test('hosted and portable markup share one source',()=>{
-  const normalize=s=>s.replace(/<meta http-equiv="Content-Security-Policy"[^>]+>\n?/,'').replace(/<style[^>]*>[\s\S]*?<\/style>\n?/g,'').replace(/<link rel="stylesheet"[^>]+>\n?/g,'').replace(/<script[^>]*>[\s\S]*?<\/script>/,'').replace(/\s+/g,' ').trim();
-  assert.equal(normalize(hosted),normalize(offline));
+  assert.deepEqual(comparableMarkup(hostedTokens),comparableMarkup(offlineTokens));
+});
+test('HTML inspection respects comments, quoted attributes and raw-text boundaries',()=>{
+  const tokens=htmlTokens('<!-- <script>comment</script> --><SCRIPT data-note=">">const x="<b>";</SCRIPT >'
+    +'<style data-note=">">b::before{content:"<script>"}</style\n><p title=">">A &amp; B</p>');
+  assert.deepEqual(inlineContents(tokens,'script'),['const x="<b>";']);
+  assert.deepEqual(inlineContents(tokens,'style'),['b::before{content:"<script>"}']);
+  assert.deepEqual(tokens.filter(token=>token.type==='startTag').map(token=>token.tagName),['script','style','p']);
+  assert.equal(tokens.find(token=>token.type==='text'&&token.text.includes('A')).text,'A & B');
+});
+test('markup comparison retains content exposed by unusual resource closing tags',()=>{
+  const expected=comparableMarkup(htmlTokens('<p>same</p>'));
+  for(const tag of ['script','style']){
+    assert.deepEqual(comparableMarkup(htmlTokens('<'+tag+'>ignored</'+tag+' ><p>same</p>')),expected);
+    const exposed=comparableMarkup(htmlTokens('<'+tag+'>ignored</'+tag+' ><p>changed</p></'+tag+'><p>same</p>'));
+    assert.deepEqual(exposed.filter(token=>token.type==='text').map(token=>token.text),['changed','same']);
+  }
 });
 const trackedFont=await fs.readFile('fonts/OpenSans-VariableFont_wdth,wght.woff2');
 test('the bundled font is the licensed source asset',()=>assert.equal(Buffer.compare(font,trackedFont),0));

@@ -10,9 +10,9 @@ function here(){
   return $.NSFileManager.defaultManager.currentDirectoryPath.js + "/";
 }
 
-const HTML   = readFile(here() + "_test/source.html");
-const SCRIPT = /<script>([\s\S]*)<\/script>/.exec(HTML)[1];
-const STYLE  = /<style[^>]*>([\s\S]*?)<\/style>/.exec(HTML)[1];
+const HTML   = readFile(here() + "tierform_app.html");
+const SCRIPT = readFile(here() + "_test/source.js");
+const STYLE  = readFile(here() + "_site/assets/app.css");
 
 function cssRules(css){
   const clean = css.replace(/\/\*[\s\S]*?\*\//g, "");

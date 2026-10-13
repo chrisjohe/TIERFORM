@@ -21,5 +21,5 @@ const hosted=template.replace('<meta charset="utf-8">','<meta charset="utf-8">\n
 await fs.rm('_site',{recursive:true,force:true});
 await fs.mkdir('_site/assets',{recursive:true});
 await Promise.all([fs.writeFile('tierform_app.html',offline),fs.writeFile('_site/index.html',hosted),fs.writeFile('_site/tierform_app.html',offline),fs.writeFile('_site/assets/app.js',js),fs.writeFile('_site/assets/app.css',css),fs.writeFile('_site/assets/fonts.css',fontCSS),fs.writeFile('_site/assets/OpenSans.woff2',font)]);
-await writeLegacySource(offline);
+await writeLegacySource();
 console.log(`Built ${VERSION}: tierform_app.html and _site/`);

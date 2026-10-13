@@ -45,19 +45,23 @@ The reduction removes repeated work, not just assertion counters:
 The harness imports actual engine, model, SVG, Canvas and PDF modules. Its
 Canvas, Image, Blob and font-readiness environment is stubbed; browser tests
 exercise the real browser rendering and download APIs. It no longer extracts
-functions or reads `_test/source.html`.
+functions or reads the generated legacy source.
 
-Document, fixture and import controller-isolation tests still use that legacy
-adapter. It removes module declarations, maps feature-state qualifications to
-isolated variables and connects notifications to existing stubs. It does not
-prove initialization or imports. The remaining extractor copies have shared
-behavioral self-checks. Their JavaScriptCore fallback remains; the standard
+Document, fixture and import controller-isolation tests read `_test/source.js`,
+written directly by the legacy adapter. It removes module declarations, maps
+feature-state qualifications to isolated variables and connects notifications
+to existing stubs. It does not prove initialization or imports. Markup and CSS
+checks read the built HTML and stylesheet separately. The remaining extractor
+copies have shared behavioral self-checks. Their JavaScriptCore fallback remains; the standard
 runner, native harness, integrity and artifact tests require Node.
 
 `modules.mjs` covers engine-instance isolation, document/history behavior,
 CSV and SVG escaping, layer boundaries and unresolved names across every
 module. `artifacts.mjs` checks hosted/portable equality, project-relative
 paths, CSP, font bytes, download parity and reproducibility.
+Integrity and artifact checks use the development-only `parse5-sax-parser`
+to inspect HTML tokens, including comments and inline script/style content.
+Markup comparisons omit resource tokens without stripping and reparsing HTML.
 
 ## Browser and release checks
 

@@ -11,8 +11,8 @@ function here(){
 }
 
 const ROOT   = here();
-const HTML   = readFile(ROOT + "_test/source.html");
-const SCRIPT = /<script>([\s\S]*)<\/script>/.exec(HTML)[1];
+const HTML   = readFile(ROOT + "tierform_app.html");
+const SCRIPT = readFile(ROOT + "_test/source.js");
 
 function maskLiterals(src){
   const out = src.split(""), n = src.length;

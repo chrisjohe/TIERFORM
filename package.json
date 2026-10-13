@@ -15,6 +15,7 @@
     "@playwright/test": "1.62.1",
     "acorn": "8.15.0",
     "esbuild": "0.28.2",
-    "eslint-scope": "8.4.0"
+    "eslint-scope": "8.4.0",
+    "parse5-sax-parser": "8.0.0"
   }
 }

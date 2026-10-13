@@ -22,6 +22,9 @@ const cases=[
 ['_site/index.html',"connect-src 'none'","connect-src 'self'",'hosted CSP permits initial same-origin assets and blocks data connections','artifacts'],
 ['tierform_app.html','<meta charset="utf-8">','<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src *">','portable output has no external assets or hosted policy','artifacts'],
 ['_site/index.html','<title>TIERFORM</title>','<title>BROKEN</title>','hosted and portable markup share one source','artifacts'],
+['test/html.cjs',"else if(token.type==='text'&&text!==null)text+=token.text;","else if(token.type==='text'&&text!==null)text+='BROKEN';",'HTML inspection respects comments, quoted attributes and raw-text boundaries','artifacts'],
+['test/html.cjs',"token.type==='endTag'&&token.tagName===resource","false",'markup comparison retains content exposed by unusual resource closing tags','artifacts'],
+['test/html.cjs',"if(text.trim())markup.push({type:'text',text});","if(text.trim()&&text!=='changed')markup.push({type:'text',text});",'markup comparison retains content exposed by unusual resource closing tags','artifacts'],
 ['_site/assets/OpenSans.woff2',null,null,'the bundled font is the licensed source asset','artifacts'],
 ['_site/tierform_app.html','<title>TIERFORM</title>','<title>BROKEN</title>','Pages distributes the same portable download','artifacts'],
 ['scripts/build.mjs','const js=result.outputFiles[0].text;','const js=result.outputFiles[0].text + "\\nvoid " + Math.random() + ";";','building twice produces identical files','artifacts']

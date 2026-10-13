@@ -3,6 +3,7 @@ const path = require('node:path');
 const nodeAssert = require('node:assert/strict');
 const {createHash} = require('node:crypto');
 const {parse} = require('acorn');
+const {htmlTokens} = require('./html.cjs');
 const {FONT,FONTS} = require('../src/model/settings.js');
 const root = path.resolve(__dirname,'..');
 const read = file => fs.readFileSync(path.join(root,file),'utf8');
@@ -13,7 +14,7 @@ const fragments = ['sprite','ribbon','menus','workspace','dialogs','info','tour'
 const markup = read('src/markup/index.html').replace('{{BODY}}',fragments).replace('{{STYLES}}','').replace('{{SCRIPT}}','');
 const matches = (regex,text) => [...text.matchAll(regex)].map(match=>match[1]);
 const unique = values => [...new Set(values)].sort();
-const flat = text => text.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+const flat = text => htmlTokens(text).filter(token=>token.type==='text').map(token=>token.text).join(' ').replace(/\s+/g,' ').trim();
 const paths = text => matches(/\bd="([^"]+)"/g,text);
 const member = node => node.computed ? node.property?.value : node.property?.name;
 let checks=0,contracts=0;
@@ -43,10 +44,10 @@ test('markup IDs and ARIA references resolve',()=>{
 test('static markup is balanced and interactive controls are not nested',()=>{
   const stack=[],errors=[];
   const voids=new Set(['area','base','br','col','embed','hr','img','input','link','meta','param','source','track','wbr']);
-  for(const match of markup.replace(/<!--[\s\S]*?-->/g,'').matchAll(/<(\/?)([a-z][\w:-]*)\b[^>]*>/gi)){
-    const tag=match[2].toLowerCase();
-    if(match[1]){const open=stack.pop();if(open!==tag)errors.push('closing '+tag+' after '+open);}
-    else if(!voids.has(tag)&&!match[0].endsWith('/>')){
+  for(const token of htmlTokens(markup)){
+    const tag=token.tagName;
+    if(token.type==='endTag'){const open=stack.pop();if(open!==tag)errors.push('closing '+tag+' after '+open);}
+    else if(token.type==='startTag'&&!voids.has(tag)&&!token.selfClosing){
       if(['button','a'].includes(tag)&&stack.includes(tag))errors.push('nested '+tag);
       stack.push(tag);
     }

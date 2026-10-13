@@ -11,8 +11,9 @@ function here(){
 }
 
 const ROOT   = here();
-const HTML   = readFile(ROOT + "_test/source.html");
-const SCRIPT = /<script>([\s\S]*)<\/script>/.exec(HTML)[1];
+const HTML   = readFile(ROOT + "tierform_app.html");
+const SCRIPT = readFile(ROOT + "_test/source.js");
+const STYLE  = readFile(ROOT + "_site/assets/app.css");
 
 function maskLiterals(src){
   const out = src.split(""), n = src.length;
@@ -680,7 +681,7 @@ try{
 
       const UNITS = {};
       for(const name of ["rowDragSurface", "gradeDragSurface"]){
-        const stmt = new RegExp("const " + name + " = makeDragSurface\\(\\{[\\s\\S]*?\\n\\}\\);").exec(HTML);
+        const stmt = new RegExp("const " + name + " = makeDragSurface\\(\\{[\\s\\S]*?\\n\\}\\);").exec(SCRIPT);
         const rootM = stmt && /root:\s*"#([a-z]+)"/.exec(stmt[0]);
         const selM  = stmt && /itemSelector:\s*"\.([a-z-]+)"/.exec(stmt[0]);
         if(rootM && selM) UNITS[rootM[1]] = selM[1];
@@ -3088,8 +3089,7 @@ try{
   }
 
   {
-    const CSS8 = ((/<style>([\s\S]*?)<\/style>/.exec(HTML) || ["", ""])[1])
-      .replace(/\/\*[\s\S]*?\*\//g, " ");
+    const CSS8 = STYLE.replace(/\/\*[\s\S]*?\*\//g, " ");
 
     const rootMatch = /:root\{([^}]*)\}/.exec(CSS8);
     check(!!rootMatch, "the :root token block is found in the stylesheet");

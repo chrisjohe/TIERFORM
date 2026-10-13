@@ -3,7 +3,7 @@ import path from 'node:path';
 
 // Existing suites isolate functions with hand-built dependency stubs. This adapter
 // removes only module wiring; module and browser tests exercise the real wiring.
-export async function writeLegacySource(offline){
+export async function writeLegacySource(){
   const entries=await fs.readdir('src',{recursive:true});
   const files=entries.filter(n=>n.endsWith('.js')).sort();
   let source=(await Promise.all(files.map(n=>fs.readFile(path.join('src',n),'utf8')))).join('\n');
@@ -21,5 +21,5 @@ export async function writeLegacySource(offline){
     .replace(/historyEvents\.message\(/g,'toast(')
     .replace(/documentChanged\(\)/g,'updateDocLabel()');
   await fs.mkdir('_test',{recursive:true});
-  await fs.writeFile('_test/source.html',offline.replace(/<script>[\s\S]*?<\/script>/,()=>'<script>\n'+source+'\n</script>'));
+  await fs.writeFile('_test/source.js',source);
 }
