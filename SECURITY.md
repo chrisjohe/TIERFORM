@@ -22,9 +22,10 @@ Reports are welcome even if you are not sure the behaviour is a bug.
 
 ## What is in scope
 
-TIERFORM is a single HTML file that runs locally with no server and no network
-access. That rules out most of the usual categories and concentrates the risk in
-one place: **the files it opens.**
+TIERFORM runs in the browser, as a hosted static app or a portable HTML file.
+The hosted app loads its script, styles and font from the same site. Editing
+and exporting do not access the network. The main data boundary is
+**the files it opens.**
 
 In scope, and taken seriously:
 
@@ -41,8 +42,8 @@ In scope, and taken seriously:
 
 Out of scope:
 
-- The app not working when it is modified, minified, or served with the script
-  extracted.
+- Failures in modified distributions that cannot be reproduced with the
+  supported portable or hosted build.
 - Anything requiring the attacker to already be able to run code on the machine
   or edit the HTML file.
 - Denial of service by opening an absurdly large file: limits exist, and the
@@ -159,30 +160,25 @@ from.
 
 ## Hosting a copy
 
-The local file makes no network requests, so a Content Security Policy adds
-nothing there — and a policy strict enough to matter would have to permit
-`'unsafe-inline'` for both script and style, since the app is one inline script
-and one inline stylesheet. It is deliberately not shipped in the file.
+`npm run build` creates `_site/` with a separate script, stylesheet and font.
+All asset paths are relative, including under GitHub Pages project paths such
+as `/TIERFORM/`. Serve that directory over HTTPS.
 
-If you host TIERFORM, extract the script and stylesheet into separate files and
-serve this policy:
+The build writes this meta policy into the hosted `index.html`:
 
 ```
-Content-Security-Policy:
-  default-src 'none';
-  script-src 'self';
-  style-src 'self';
-  img-src 'self' data:;
-  font-src 'self';
-  connect-src 'none';
-  form-action 'none';
-  frame-ancestors 'none';
-  base-uri 'none';
+default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline';
+img-src data:; font-src 'self'; connect-src 'none'; form-action 'none';
+base-uri 'none'; object-src 'none'
 ```
 
-`img-src data:` is required — every photo is a data URL. `connect-src 'none'`
-is the one that matters most: it turns the no-network promise into something the
-browser enforces rather than something you take on trust.
+Scripts come only from the same origin; inline scripts and dynamic evaluation
+are forbidden. Styles allow inline values because popover positioning, photo
+framing and document colours update element styles at runtime. Photos and the
+favicon are data URLs. `connect-src 'none'` blocks application data connections.
+GitHub Pages does not provide custom response headers; directives ignored in
+meta policies, such as `frame-ancestors`, are not advertised here.
 
-Serve it over HTTPS, and note that hosting it re-enables **Copy PNG**, which
-browsers withhold from pages opened as files.
+The portable download embeds the same script, styles and font, carries no
+hosted policy, and needs no initial asset requests. Both outputs are tested.
+Hosting enables **Copy PNG** in browsers that withhold it from local files.

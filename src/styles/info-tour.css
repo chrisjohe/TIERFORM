@@ -1,0 +1,97 @@
+  .info-actions > .info-apps{grid-column:4;grid-row:1}
+  .info-doc{font-size:12.5px;line-height:1.55;color:var(--ink-2)}
+  .info-doc[hidden]{display:none}
+  .info-doc h4{
+    margin:16px 0 5px;
+    font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);
+  }
+  .info-doc > :first-child{margin-top:8px}
+  .info-doc p{margin:0 0 7px}
+  .info-doc ul{margin:0;padding-left:16px}
+  .info-doc li{margin-bottom:2px}
+  .info-doc a{color:var(--brand-ink);font-weight:600}
+  .info-doc kbd{
+    font:inherit;font-size:11px;background:var(--line-2);border:1px solid var(--line);
+    border-radius:3px;padding:0 3px;color:var(--ink-2);
+  }
+  .apps-list{list-style:none;display:grid;gap:20px}
+  #infoAppsDoc .apps-list{margin:26px 0 4px;padding:0}
+  .apps-row{display:flex;align-items:flex-start;gap:16px}
+  .apps-tile{
+    flex:0 0 auto;width:44px;height:44px;border-radius:9px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .apps-tile,.apps-tile-tierform,.apps-tile-driftform{color:#fff}
+  .apps-tile svg{width:28px;height:28px;fill:currentColor}
+  .apps-tile-tierform{background:var(--brand)}
+  .apps-tile-driftform{background:#801818}
+  .apps-name{display:block;font-weight:650;color:var(--ink);font-size:13.5px;margin-bottom:2px}
+  .apps-here{font-weight:400;font-size:11px;color:var(--ink-2);margin-left:6px}
+  .apps-tag{display:block;margin-top:4px;line-height:1.55}
+  #infoAppsDoc .about-made{margin-top:22px!important}
+  .modal-info.about-open{padding:24px 28px 20px;text-align:center}
+  .about-open #infoTitle{text-align:left}
+  .about-hero{display:flex;flex-direction:column;align-items:center}
+  .about-mark{width:78px;height:65px;fill:currentColor;margin:2px 0 7px;color:var(--brand-mark)}
+  .about-wordmark{color:var(--brand-mark);font-size:20px;font-weight:600;letter-spacing:.30em;margin-left:.30em}
+  .about-version{font-size:14px;margin:14px 0 5px!important;color:var(--ink)}
+  .about-copy{font-size:13px;line-height:1.5;margin-bottom:12px!important;color:var(--ink)}
+  .about-github, .info-link{
+    display:inline-flex;align-items:center;justify-content:center;gap:9px;
+    min-height:40px;padding:8px 14px;border-radius:6px;background:var(--brand);
+    color:#fff!important;font-size:13px;font-weight:650!important;text-decoration:none;
+  }
+  .info-doc p.info-link-row{text-align:center}
+  .about-github:hover, .info-link:hover{background:var(--brand-dark)}
+  .about-github:focus-visible,
+  .info-link:focus-visible{outline:2px solid var(--brand-ink);outline-offset:3px}
+  .about-github svg, .info-link svg{width:20px;height:20px;flex:0 0 auto}
+  .info-link svg{fill:currentColor}
+  .about-open .about-notices-title{
+    margin:18px 0 8px;font-size:10.5px;font-weight:700;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--ink-2);text-align:left;
+  }
+  .about-notices{text-align:left;font-size:11.5px;line-height:1.42;color:var(--ink-2)}
+  .about-notice{margin:0 0 10px}
+  .about-notice:last-child{margin-bottom:0}
+  .about-notice b{display:block;color:var(--ink);font-size:12px}
+  .about-note{display:block;margin-top:3px;color:var(--mute)}
+  .about-made{display:flex;align-items:center;justify-content:center;gap:7px;margin-top:14px!important;font-size:11.5px;color:var(--ink-2)}
+  .about-flag{width:18px;height:12px;flex:0 0 auto}
+  #tourBlock,#tourRing,#tourCard{display:none}
+  body.tour-on #tourBlock{display:block}
+  body.tour-on #tourRing{display:block}
+  body.tour-on #tourCard{display:block}
+  #tourBlock{position:fixed;inset:0;z-index:120}
+  #tourRing{
+    position:fixed;z-index:121;pointer-events:none;
+    border:2px solid #fff;border-radius:8px;
+    box-shadow:0 0 0 9999px var(--tour-dim);
+  }
+  #tourCard{
+    position:fixed;z-index:122;
+    background:var(--surface);color:var(--ink);border:1px solid var(--line);
+    border-radius:8px;width:280px;padding:14px 16px;
+    box-shadow:0 20px 60px rgba(16,22,30,.28);
+  }
+  #tourTitle{margin:0 0 6px;font-size:13.5px;font-weight:600}
+  #tourBody{margin:0 0 12px;font-size:12.5px;color:var(--ink-2)}
+  .tour-foot{display:flex;align-items:center;gap:8px}
+  #tourCount{margin-right:auto;font-size:11px;color:var(--mute)}
+  .statusbar{
+    flex:0 0 auto;display:flex;align-items:center;gap:10px;
+    padding:5px 14px;border-top:1px solid var(--line);background:var(--surface);
+    font-size:11.5px;color:var(--mute);
+  }
+  .statusbar .sp{flex:1}
+  .preview-note{display:inline-flex;align-items:center;gap:4px}
+  .preview-note[hidden]{display:none}
+  .preview-note .ic{width:13px;height:13px}
+  .opening{color:var(--brand-ink);font-weight:600}
+  .opening[hidden]{display:none}
+  #tourMark{display:none}
+  body.tour-on #tourMark{display:inline-flex}
+  .tour-mark{
+    background:var(--brand);color:#fff;border-radius:3px;padding:1px 7px;
+    font-size:11px;font-weight:600;
+  }

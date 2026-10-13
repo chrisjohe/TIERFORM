@@ -1,0 +1,197 @@
+<div class="modal-backdrop" id="infoModal" hidden>
+  <div class="modal modal-info" role="dialog" aria-modal="true" aria-labelledby="infoTitle">
+    <button type="button" class="ghost modal-x" aria-label="Close" title="Close"><svg class="ic"><use href="#i-close"/></svg></button>
+    <h3 id="infoTitle"></h3>
+
+    <div class="info-doc" id="infoPrivacyDoc" hidden>
+      <h4>Where your data lives</h4>
+      <p>Everything stays on your machine. Names, groups and photos are read, resized and
+         drawn entirely inside your browser. While you edit and while you export,
+         <b>this app makes no network requests at all</b> — nothing is uploaded, and there
+         is no analytics, no telemetry and no error reporting. The links on this page are
+         ordinary links: they reach the network only if you click one.</p>
+      <p>The hosted app loads its script, styles and bundled font from this site once. The downloaded HTML includes all of them and opens offline.</p>
+      <p>Nothing is stored in the app between visits — not even a draft. The roster file
+         <b>is</b> your saved work, so save before you close the tab.</p>
+      <h4>Handle roster files with care</h4>
+      <p>A roster file holds names, groups and the photos themselves, embedded in full.
+         In most places that makes it <b>personal data</b>, with the obligations that
+         follow. The same is true of every export: the PNG, the PDF and the SVG all carry
+         the faces and the names.</p>
+      <p>So share a roster, a chart or an export only with people entitled to see who is
+         in the team — and remember that emailing a chart to a wide list is a disclosure
+         like any other.</p>
+      <p><b>Opening a roster from someone else</b> is the one risky action here. The whole
+         file is checked before anything is adopted, and a file whose structure cannot be
+         trusted is refused without touching the roster you have open. Each photo is read
+         as bytes first — its format has to match the type the file claims, and the size it
+         declares has to be within the limits — before the browser is asked to decode it.
+         A photo that fails costs only that photo: the person keeps their name and grade,
+         and you are told what was wrong.</p>
+      <p>That is a size and format check, not a guarantee about hostile images, so the safe
+         habit is still the ordinary one: open files from people you actually know.</p>
+    </div>
+
+    <div class="info-doc" id="infoTipsDoc" hidden>
+      <h4>Shortcuts &amp; tips</h4>
+      <ul>
+        <li><kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Z</kbd> undo · <kbd>⇧</kbd>+<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Z</kbd> redo</li>
+        <li><kbd>Esc</kbd> closes a menu or dialog</li>
+        <li>Behind <b>Add people</b>'s arrow: <b>Add list…</b> takes a pasted list and
+            <b>Import CSV…</b> reads the same columns from a file — both land in one preview</li>
+        <li>Paste a list: <i>Name, Grade, Group, Role</i> — tab, comma or semicolon</li>
+        <li>Starting from nothing? With no grades yet the Add dialog asks for your first
+            grade, and a pasted list builds the grades from its own Grade column</li>
+        <li>Drop JPEG or PNG photos on the chart or on the sidebar — one that matches a
+            photo-less person by name attaches to them</li>
+        <li>File names become names — <code>First_Last.jpg</code>, and
+            <code>Last, First</code> is turned around</li>
+        <li>Click a photo to reframe it: drag to pan, slider to zoom</li>
+        <li>Type a group wherever one is asked for: matching text joins that group, new
+            text starts one. Reorder, rename or merge them under <b>Structure ▸ Group</b>;
+            groups show in each person's subline and are the rows of the Matrix layout</li>
+        <li>On a grade: <b>Attach</b> removes the gap to the previous grade · <b>Share</b> combines the two grades on one surface — band, lane, cell or column, whichever the layout draws</li>
+        <li>A grade too crowded for one row: split its people across two grades with the
+            same fill and <b>Attach</b> the second — the pair reads as one deep band</li>
+        <li>Switching layouts loses nothing: the triangle angle, a grade's alignment,
+            every setting is kept and found again when you switch back</li>
+        <li><b>Structure ▸ Templates</b> replaces the whole grade structure and sets the layout, accent and text colour to match; <b>Clear grades</b> empties it instead. Both are unavailable while anyone is on the roster — there is nowhere to put a person whose grade has gone. Remove the people first, or move them to a grade you are keeping.</li>
+        <li>Nothing saves itself: the roster lives in the file you save, and the icon
+            beside the file name shows when changes are unsaved</li>
+        <li>PNG and PDF are rasterised here and keep their look; SVG uses the fonts of whoever opens it</li>
+        <li>TIERFORM follows your system's light or dark appearance automatically</li>
+      </ul>
+      <h4>Where this works</h4>
+      <p>TIERFORM is optimised for desktop. Other form factors are only partly
+         supported: on a phone or a small tablet the roster and the chart take
+         turns instead of sharing the screen.</p>
+      <h4>Browsers</h4>
+      <p><b>Copy PNG</b> needs the browser's clipboard API, which Safari and
+         Chrome do not grant to a page opened from a file. Where it is unavailable the
+         button is switched off and says so — use <b>Export ▸ Export PNG</b>, which
+         writes the file to disk instead, or serve the file over http and Copy PNG
+         comes back.</p>
+    </div>
+
+    <div class="info-doc" id="infoBugDoc" hidden>
+      <h4>If you find a problem</h4>
+      <p>Report it privately: open a security advisory on the project's GitHub page, under
+         <b>Security ▸ Report a vulnerability</b>, or here.</p>
+      <p class="info-link-row"><a class="info-link" href="https://github.com/chrisjohe/TIERFORM/security/advisories/new"
+            target="_blank" rel="noopener noreferrer"
+            aria-label="Report a TIERFORM vulnerability privately on GitHub">
+          <svg aria-hidden="true"><use href="#i-frame-bug"/></svg>
+          <span>Report a vulnerability</span>
+        </a></p>
+      <p>The report stays between you and the maintainer until a fix is published. Please do
+         not open a public issue for a vulnerability.</p>
+      <p>Include what you did, what happened, and which browser and version you used. A roster
+         file that reproduces the problem is the most useful thing you can attach, but
+         <b>strip any real names and photos first</b>, since a roster file is personal data.</p>
+      <p>Do not expect an acknowledgement immediately. This is a small project maintained by
+         one person, so please allow a reasonable time to fix before disclosing publicly.
+         Reports are welcome even if you are not sure the behaviour is a bug.</p>
+      <h4>What counts</h4>
+      <p>The app runs on your machine with no server and no network access, which rules out
+         most of the usual categories and concentrates the risk in one place: <b>the files it
+         opens</b>. A roster file that runs script, that gets the app to reach the network, or
+         that quietly corrupts or drops part of the roster you already have open. An image that
+         escapes the size and shape limits. An export that carries more than the chart shows.</p>
+      <p>Outside that: the app modified, minified or served in pieces; anything that needs
+         someone to already be running code on your machine; and an absurdly large file, where
+         the worst case is a tab you have to close.</p>
+      <p>What happens to a roster file when you open one is described under <b>Privacy</b>.</p>
+      <p>The full account — how untrusted input is handled at each step, and a content security
+         policy if you host a copy — is in <code>SECURITY.md</code> in the repository.</p>
+    </div>
+
+    <div class="info-doc" id="infoAppsDoc" hidden>
+      <p>Single-file apps that extend your Office workflow. Each one runs offline in your
+         browser — nothing leaves your machine — and exports as PNG, PDF and SVG.</p>
+      <ul class="apps-list">
+        <li class="apps-row">
+          <span class="apps-tile apps-tile-tierform" aria-hidden="true"><svg><use href="#i-logo"/></svg></span>
+          <span class="apps-text">
+            <span class="apps-name">TIERFORM <span class="apps-here">this app</span></span>
+            <span class="apps-tag">Team charts from a list of names and photos — as a pyramid, a tornado, a histogram, swimlanes, a hive or a matrix.</span>
+          </span>
+        </li>
+        <li class="apps-row">
+          <span class="apps-tile apps-tile-driftform" aria-hidden="true"><svg><use href="#i-driftform"/></svg></span>
+          <span class="apps-text">
+            <span class="apps-name"><a href="https://github.com/chrisjohe/DRIFTFORM" target="_blank" rel="noopener noreferrer">DRIFTFORM</a></span>
+            <span class="apps-tag">Word clouds from an evaluated word list — reproducible from a seed, so the same list gives the same cloud every time.</span>
+          </span>
+        </li>
+      </ul>
+      <p class="about-made">
+        <svg class="about-flag" viewBox="0 0 810 540" aria-hidden="true">
+          <path fill="#003399" d="M0 0H810V540H0Z"/>
+          <path fill="#FFCC00" d="M405 30L418.47 71.46L462.06 71.46L426.8 97.08L440.27 138.54L405 112.92L369.73 138.54L383.2 97.08L347.94 71.46L391.53 71.46ZM495 54.12L508.47 95.57L552.06 95.57L516.8 121.2L530.27 162.66L495 137.03L459.73 162.66L473.2 121.2L437.94 95.57L481.53 95.57ZM560.88 120L574.36 161.46L617.95 161.46L582.68 187.08L596.15 228.54L560.88 202.92L525.62 228.54L539.09 187.08L503.82 161.46L547.41 161.46ZM585 210L598.47 251.46L642.06 251.46L606.8 277.08L620.27 318.54L585 292.92L549.73 318.54L563.2 277.08L527.94 251.46L571.53 251.46ZM560.88 300L574.36 341.46L617.95 341.46L582.68 367.08L596.15 408.54L560.88 382.92L525.62 408.54L539.09 367.08L503.82 341.46L547.41 341.46ZM495 365.88L508.47 407.34L552.06 407.34L516.8 432.97L530.27 474.43L495 448.8L459.73 474.43L473.2 432.97L437.94 407.34L481.53 407.34ZM405 390L418.47 431.46L462.06 431.46L426.8 457.08L440.27 498.54L405 472.92L369.73 498.54L383.2 457.08L347.94 431.46L391.53 431.46ZM315 365.88L328.47 407.34L372.06 407.34L336.8 432.97L350.27 474.43L315 448.8L279.73 474.43L293.2 432.97L257.94 407.34L301.53 407.34ZM249.12 300L262.59 341.46L306.18 341.46L270.91 367.08L284.38 408.54L249.12 382.92L213.85 408.54L227.32 367.08L192.05 341.46L235.64 341.46ZM225 210L238.47 251.46L282.06 251.46L246.8 277.08L260.27 318.54L225 292.92L189.73 318.54L203.2 277.08L167.94 251.46L211.53 251.46ZM249.12 120L262.59 161.46L306.18 161.46L270.91 187.08L284.38 228.54L249.12 202.92L213.85 228.54L227.32 187.08L192.05 161.46L235.64 161.46ZM315 54.12L328.47 95.57L372.06 95.57L336.8 121.2L350.27 162.66L315 137.03L279.73 162.66L293.2 121.2L257.94 95.57L301.53 95.57Z"/>
+        </svg>
+        Designed and developed in Europe
+      </p>
+    </div>
+
+    <div class="info-doc" id="infoAboutDoc" hidden>
+      <div class="about-hero">
+        <svg class="about-mark" aria-hidden="true"><use href="#i-logo"/></svg>
+        <div class="about-wordmark">TIERFORM</div>
+        <p class="about-version"></p>
+        <p class="about-copy">© 2026 Christian J. Heinze</p>
+        <a class="about-github" href="https://github.com/chrisjohe/TIERFORM"
+           target="_blank" rel="noopener noreferrer" aria-label="Open TIERFORM on GitHub">
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"
+              d="M8 0C3.58 0 0 3.58 0 8C0 11.54 2.29 14.53 5.47 15.59C5.87 15.66 6.02 15.42 6.02 15.21C6.02 15.02 6.01 14.39 6.01 13.72C4 14.09 3.48 13.23 3.32 12.78C3.23 12.55 2.84 11.84 2.5 11.65C2.22 11.5 1.82 11.13 2.49 11.12C3.12 11.11 3.57 11.7 3.72 11.94C4.44 13.15 5.59 12.81 6.05 12.6C6.12 12.08 6.33 11.73 6.56 11.53C4.78 11.33 2.92 10.64 2.92 7.58C2.92 6.71 3.23 5.99 3.74 5.43C3.66 5.23 3.38 4.41 3.82 3.31C3.82 3.31 4.49 3.1 6.02 4.13C6.66 3.95 7.34 3.86 8.02 3.86C8.7 3.86 9.38 3.95 10.02 4.13C11.55 3.09 12.22 3.31 12.22 3.31C12.66 4.41 12.38 5.23 12.3 5.43C12.81 5.99 13.12 6.7 13.12 7.58C13.12 10.65 11.25 11.33 9.47 11.53C9.76 11.78 10.01 12.26 10.01 13.01C10.01 14.08 10 14.94 10 15.21C10 15.42 10.15 15.67 10.55 15.59C13.71 14.53 16 11.53 16 8C16 3.58 12.42 0 8 0Z"/>
+          </svg>
+          <span>Support on GitHub</span>
+        </a>
+      </div>
+
+      <h4 class="about-notices-title">Notices &amp; licences</h4>
+      <div class="about-notices">
+        <p class="about-notice"><b>TIERFORM and the TIERFORM logo</b>
+          © 2026 Christian J. Heinze. Licensed under the Apache License, Version 2.0 ·
+          <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener noreferrer">apache.org/licenses/LICENSE-2.0</a>.
+          Use it, modify it, sell it, fork it. Passing this file on is redistribution: the
+          licence and the notices on this page travel with it. The TIERFORM logo is original
+          work by the same author and is covered by the same licence. TIERFORM and the TIERFORM
+          logo are trademarks of Christian J. Heinze. No trademark licence is granted under the
+          Apache License; see Section 6.</p>
+        <p class="about-notice"><b>Open Sans</b>
+          © 2020 The Open Sans Project Authors · SIL Open Font License, Version 1.1 ·
+          <a href="https://openfontlicense.org" target="_blank" rel="noopener noreferrer">openfontlicense.org</a>.
+          The OFL keeps two conditions on any redistribution: the font may not be sold on its
+          own and a modified version of the font may not be shipped under the name “Open
+          Sans”.</p>
+        <p class="about-notice"><b>GitHub Invertocat</b>
+          © GitHub, Inc. GitHub and the Invertocat are trademarks of GitHub, Inc. The mark
+          appears solely on the button linking to this project’s repository, as permitted by the
+          <a href="https://docs.github.com/en/site-policy/other-site-policies/github-logo-policy"
+             target="_blank" rel="noopener noreferrer">GitHub Logo Policy</a>; it is not covered
+          by TIERFORM’s licence, and no affiliation or endorsement is implied.</p>
+        <p class="about-notice"><b>Material Symbols</b>
+          © Google LLC. Licensed under the Apache License, Version 2.0 ·
+          <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener noreferrer">apache.org/licenses/LICENSE-2.0</a>.
+          Every icon in this app except the TIERFORM logo is unmodified Material Symbols path
+          data, recoloured through currentColor. Source:
+          <a href="https://github.com/google/material-design-icons" target="_blank" rel="noopener noreferrer">github.com/google/material-design-icons</a>.
+          Google’s name and trademarks are not used to imply any affiliation with or endorsement
+          of TIERFORM.</p>
+        <p class="about-note">A summary of what the licenses say, not legal advice.</p>
+      </div>
+      <p class="about-made">
+        <svg class="about-flag" viewBox="0 0 810 540" aria-hidden="true">
+          <path fill="#003399" d="M0 0H810V540H0Z"/>
+          <path fill="#FFCC00" d="M405 30L418.47 71.46L462.06 71.46L426.8 97.08L440.27 138.54L405 112.92L369.73 138.54L383.2 97.08L347.94 71.46L391.53 71.46ZM495 54.12L508.47 95.57L552.06 95.57L516.8 121.2L530.27 162.66L495 137.03L459.73 162.66L473.2 121.2L437.94 95.57L481.53 95.57ZM560.88 120L574.36 161.46L617.95 161.46L582.68 187.08L596.15 228.54L560.88 202.92L525.62 228.54L539.09 187.08L503.82 161.46L547.41 161.46ZM585 210L598.47 251.46L642.06 251.46L606.8 277.08L620.27 318.54L585 292.92L549.73 318.54L563.2 277.08L527.94 251.46L571.53 251.46ZM560.88 300L574.36 341.46L617.95 341.46L582.68 367.08L596.15 408.54L560.88 382.92L525.62 408.54L539.09 367.08L503.82 341.46L547.41 341.46ZM495 365.88L508.47 407.34L552.06 407.34L516.8 432.97L530.27 474.43L495 448.8L459.73 474.43L473.2 432.97L437.94 407.34L481.53 407.34ZM405 390L418.47 431.46L462.06 431.46L426.8 457.08L440.27 498.54L405 472.92L369.73 498.54L383.2 457.08L347.94 431.46L391.53 431.46ZM315 365.88L328.47 407.34L372.06 407.34L336.8 432.97L350.27 474.43L315 448.8L279.73 474.43L293.2 432.97L257.94 407.34L301.53 407.34ZM249.12 300L262.59 341.46L306.18 341.46L270.91 367.08L284.38 408.54L249.12 382.92L213.85 408.54L227.32 367.08L192.05 341.46L235.64 341.46ZM225 210L238.47 251.46L282.06 251.46L246.8 277.08L260.27 318.54L225 292.92L189.73 318.54L203.2 277.08L167.94 251.46L211.53 251.46ZM249.12 120L262.59 161.46L306.18 161.46L270.91 187.08L284.38 228.54L249.12 202.92L213.85 228.54L227.32 187.08L192.05 161.46L235.64 161.46ZM315 54.12L328.47 95.57L372.06 95.57L336.8 121.2L350.27 162.66L315 137.03L279.73 162.66L293.2 121.2L257.94 95.57L301.53 95.57Z"/>
+        </svg>
+        Designed and developed in Europe
+      </p>
+    </div>
+
+    <div class="btnrow modal-foot">
+      <button class="primary" id="infoCloseBtn">Close</button>
+    </div>
+  </div>
+</div>

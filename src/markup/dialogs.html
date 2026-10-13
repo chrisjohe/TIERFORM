@@ -1,0 +1,167 @@
+<div class="menu" id="personMenu" role="menu" hidden></div>
+
+<div class="modal-backdrop" id="askModal" hidden>
+  <div class="modal modal-ask" role="dialog" aria-modal="true"
+       aria-labelledby="askTitle" aria-describedby="askBody">
+    <button type="button" class="ghost modal-x" aria-label="Close" title="Close"><svg class="ic"><use href="#i-close"/></svg></button>
+    <h3 id="askTitle"></h3>
+    <div id="askBody"></div>
+    <div class="btnrow modal-foot" id="askActions"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="importModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="importTitle">
+    <button type="button" class="ghost modal-x" aria-label="Close" title="Close"><svg class="ic"><use href="#i-close"/></svg></button>
+    <h3 id="importTitle">Import photos</h3>
+    <p class="empty" style="padding-top:0" id="importCount"></p>
+    <p class="warn-chip" id="importNoGrades" hidden>Add a grade or apply a template under Structure first</p>
+    <div class="add-row">
+      <label class="field">
+        <span>Grade</span>
+        <select id="importTier"></select>
+      </label>
+      <label class="field">
+        <span>Group</span>
+        <input type="text" id="importGroup" maxlength="200" placeholder="Berlin" autocomplete="off" list="groupOptions">
+      </label>
+    </div>
+    <div class="btnrow modal-foot">
+      <button class="primary" id="importConfirmBtn">Import</button>
+      <button id="importCancelBtn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="addModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="addTitle">
+    <button type="button" class="ghost modal-x" aria-label="Close" title="Close"><svg class="ic"><use href="#i-close"/></svg></button>
+    <h3 id="addTitle">Add people</h3>
+    <input type="file" id="addPhoto" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden>
+
+    <div class="add-photo-empty" id="addPhotoEmpty">
+      <button type="button" class="np-circle" id="addPhotoPick" aria-label="Add a photo">?</button>
+      <button type="button" id="addPhotoBtn"><svg class="ic"><use href="#i-add-photo"/></svg>Add photo</button>
+    </div>
+
+    <div id="addPhotoWell" hidden></div>
+    <label class="field">
+      <span>Name</span>
+      <input type="text" id="addName" maxlength="200" placeholder="Jane Doe" autocomplete="off">
+    </label>
+    <div class="add-row">
+      <label class="field" id="addTierField">
+        <span>Grade</span>
+        <select id="addTier"></select>
+      </label>
+
+      <label class="field" id="addFirstGradeField" hidden>
+        <span>First grade</span>
+        <input type="text" id="addFirstGrade" maxlength="200" placeholder="Partner" autocomplete="off">
+      </label>
+      <label class="field">
+        <span>Group</span>
+        <input type="text" id="addGroup" maxlength="200" placeholder="Berlin" autocomplete="off" list="groupOptions">
+      </label>
+    </div>
+
+    <p class="add-template-hint" id="addTemplateHint" hidden>This document has no grades yet — the one you type above is created together with this person. Setting up several grades?
+      <button type="button" id="addGoTemplates">Apply a template…</button></p>
+    <div class="add-row role-row">
+      <label class="field">
+        <span>Role shown on the chart (optional)</span>
+        <input type="text" id="addRole" maxlength="200" autocomplete="off">
+      </label>
+    </div>
+    <div class="btnrow modal-foot">
+
+      <button id="addAddBtn">Add &amp; continue</button>
+      <button class="primary" id="addAddCloseBtn">Add &amp; close</button>
+      <button id="addDoneBtn">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="editModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="editTitle">
+    <button type="button" class="ghost modal-x" aria-label="Close" title="Close"><svg class="ic"><use href="#i-close"/></svg></button>
+    <h3 id="editTitle">Edit person</h3>
+    <div id="editPhoto"></div>
+    <label class="field">
+      <span>Name</span>
+      <input type="text" id="editName" maxlength="200" placeholder="First Last" autocomplete="off">
+    </label>
+    <div class="add-row">
+      <label class="field">
+        <span>Grade</span>
+        <select id="editTier"></select>
+      </label>
+      <label class="field">
+        <span>Group</span>
+        <input type="text" id="editGroup" maxlength="200" placeholder="Berlin" autocomplete="off" list="groupOptions">
+      </label>
+    </div>
+    <div class="add-row role-row">
+      <label class="field">
+        <span>Role shown on the chart (optional)</span>
+        <input type="text" id="editRole" maxlength="200" autocomplete="off">
+      </label>
+    </div>
+
+    <div class="btnrow modal-foot">
+      <button class="danger foot-start" id="editRemoveBtn"><svg class="ic"><use href="#i-delete"/></svg>Remove person</button>
+      <button class="primary" id="editDoneBtn">Done</button>
+    </div>
+  </div>
+</div>
+
+<datalist id="groupOptions"></datalist>
+
+<div class="modal-backdrop" id="pasteModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="pasteTitle">
+    <button type="button" class="ghost modal-x" aria-label="Close" title="Close"><svg class="ic"><use href="#i-close"/></svg></button>
+    <h3 id="pasteTitle">Paste list</h3>
+
+    <div id="pasteEntry">
+      <p class="empty" style="padding-top:0">One person per line: <b>Name, Grade, Group, Role</b> — tab, comma or
+        semicolon separated. Grade, Group and Role are optional; Grade is matched against
+        each grade's code or name, and a row naming none this document has goes to a new
+        grade called NEW. A row with no group column gets no group; a Role is shown on
+        the chart in place of the grade name. In a document with no grades yet, the Grade
+        column itself creates them — each distinct value becomes one grade, in the order
+        it first appears.</p>
+      <textarea id="pasteArea" placeholder="Jane Doe&#9;Manager&#9;Berlin&#9;Country Head" spellcheck="false"></textarea>
+      <div class="btnrow modal-foot">
+        <button class="primary" id="pastePreviewBtn">Preview</button>
+        <button id="pasteCancelBtn">Cancel</button>
+      </div>
+    </div>
+    <div id="pastePreview" hidden>
+      <p class="empty" style="padding-top:0" id="pastePreviewSummary"></p>
+      <div class="paste-table-wrap">
+        <table class="paste-table">
+          <thead><tr><th>Name</th><th>Grade</th><th>Group</th><th>Role</th></tr></thead>
+          <tbody id="pasteTableBody"></tbody>
+        </table>
+      </div>
+      <div class="btnrow modal-foot">
+        <button class="primary" id="pasteAddBtn">Add these</button>
+        <button class="danger" id="pasteReplaceBtn">Replace roster</button>
+        <button id="pasteBackBtn">Back</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="groupModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="groupTitle">
+    <button type="button" class="ghost modal-x" aria-label="Close" title="Close"><svg class="ic"><use href="#i-close"/></svg></button>
+    <h3 id="groupTitle">Groups</h3>
+    <label class="field field-big"><span>Axis label <span class="badge-2d" aria-hidden="true">2D</span></span><input type="text" id="groupsLabel" maxlength="200" placeholder="Office, Team, …" title="Names the second dimension — drawn by the Matrix layout above the row labels, left of the first grade"></label>
+    <p class="empty" style="padding-top:0" id="groupEmpty">No groups yet. People get one in the Add and Edit dialogs, or from the Group column of a pasted list or CSV.</p>
+    <div id="groupList"></div>
+    <div class="btnrow modal-foot">
+      <button class="primary" id="groupDoneBtn">Done</button>
+    </div>
+  </div>
+</div>

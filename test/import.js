@@ -11,7 +11,7 @@ function here(){
 }
 
 const ROOT   = here();
-const HTML   = readFile(ROOT + "tierform_app.html");
+const HTML   = readFile(ROOT + "_test/source.html");
 const SCRIPT = /<script>([\s\S]*)<\/script>/.exec(HTML)[1];
 
 function maskLiterals(src){
@@ -262,6 +262,11 @@ const M = new Function(PREAMBLE +
   " computeLayout, computePyramidLayout, computeTornadoLayout, computeHistogramLayout, computeSwimlaneLayout, computeHiveLayout, computeMatrixLayout," +
   " meas, toSVG, LIMITS, newTier, setState(s){ state = s; }};")();
 
+if(typeof require !== "undefined"){
+  Object.assign(M, require("../src/engine/index.js").createLayoutEngine(M.meas));
+  M.toSVG = require("../src/render/svg.js").toSVG;
+  M.parseAndValidateRoster = require("../src/io/roster.js").parseAndValidateRoster;
+}
 
 let passed = 0;
 const failures = [];

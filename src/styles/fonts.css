@@ -1,0 +1,7 @@
+@font-face{
+  font-family:'Open Sans';
+  font-style:normal;
+  font-weight:300 800;
+  font-stretch:75% 100%;
+  src:url(./OpenSans.woff2) format('woff2-variations');
+}

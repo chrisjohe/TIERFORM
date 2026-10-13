@@ -1,0 +1,237 @@
+<div id="shell">
+
+<header class="titlebar">
+  <div class="tb-top">
+    <div class="qat" id="qat">
+      <button class="qbtn" data-cmd="save" title="Save a copy of the roster file"><svg class="ic"><use href="#i-save"/></svg></button>
+      <button class="qbtn" id="undoBtn" data-cmd="undo" title="Undo (Ctrl+Z)" disabled><svg class="ic"><use href="#i-undo"/></svg></button>
+      <button class="qbtn" id="redoBtn" data-cmd="redo" title="Redo (Ctrl+Shift+Z)" disabled><svg class="ic"><use href="#i-redo"/></svg></button>
+    </div>
+    <div class="tb-brand">
+      <svg class="tb-mark" aria-hidden="true"><use href="#i-logo"/></svg>
+      <div class="wordmark">TIERFORM</div>
+    </div>
+    <div class="tb-pad"></div>
+  </div>
+  <div class="rb-tabs" role="tablist" aria-label="Ribbon">
+
+    <button class="rb-tab on" data-tab="file"   id="tab-file"   role="tab" aria-controls="pane-file"   aria-selected="true"  tabindex="0">Start</button>
+    <button class="rb-tab"    data-tab="grades" id="tab-grades" role="tab" aria-controls="pane-grades" aria-selected="false" tabindex="-1">Structure</button>
+    <button class="rb-tab"    data-tab="design" id="tab-design" role="tab" aria-controls="pane-design" aria-selected="false" tabindex="-1">Design</button>
+
+    <span class="rb-doc" id="docName">
+      <svg class="ic doc-ic" id="docIconSaved" aria-hidden="true"><use href="#i-file-save"/></svg>
+      <svg class="ic doc-ic" id="docIconUnsaved" aria-hidden="true"><use href="#i-file-save-off"/></svg>
+      <span id="docStatus"></span>
+      <span aria-hidden="true">·</span>
+      <span id="docText"></span>
+    </span>
+  </div>
+</header>
+
+<div class="ribbon">
+  <div class="rb-body">
+
+    <div class="rb-pane on" data-pane="file" id="pane-file" role="tabpanel" aria-labelledby="tab-file" tabindex="0">
+      <div class="rb-group">
+        <div class="rb-file">
+          <div class="split rb-lead" id="saveSplit">
+            <button class="big" data-cmd="save" title="Save a copy of the roster file">
+              <svg class="ic"><use href="#i-save"/></svg><span>Save copy</span>
+            </button>
+            <button class="split-toggle" id="saveMenuBtn" aria-haspopup="menu" aria-expanded="false"
+                    aria-controls="saveMenu" title="More save options">
+              <svg class="ic"><use href="#i-caret"/></svg>
+            </button>
+            <div class="menu" id="saveMenu" role="menu" hidden>
+              <button role="menuitem" data-cmd="saveAs"><svg class="ic"><use href="#i-save-as"/></svg>Save copy as…</button>
+            </div>
+          </div>
+          <button class="rb-mini" data-cmd="open"><svg class="ic"><use href="#i-open"/></svg>Open…</button>
+          <button class="rb-mini" data-cmd="new"><svg class="ic"><use href="#i-new"/></svg>New canvas</button>
+        </div>
+        <div class="lbl">File</div>
+      </div>
+      <div class="rb-group">
+        <div class="rb-file">
+          <button class="big rb-lead" data-cmd="copyPng" title="Copies a PNG at 150 dpi">
+            <svg class="ic"><use href="#i-copy"/></svg><span>Copy PNG</span>
+          </button>
+
+          <button class="style-command style-tall rb-lead2" id="exportMenuBtn"
+                  aria-haspopup="menu" aria-expanded="false" aria-controls="exportMenu"
+                  title="Choose an export format">
+            <svg class="ic"><use href="#i-export"/></svg><span class="style-label">Export</span><svg class="ic style-caret"><use href="#i-caret"/></svg>
+          </button>
+          <div class="menu" id="exportMenu" role="menu" hidden>
+            <button role="menuitem" data-cmd="exportPng"><svg class="ic"><use href="#i-png"/></svg>Export PNG</button>
+            <button role="menuitem" data-cmd="exportPdf"><svg class="ic"><use href="#i-pdf"/></svg>Export PDF</button>
+            <button role="menuitem" data-cmd="exportSvg"><svg class="ic"><use href="#i-photos"/></svg>Export SVG</button>
+            <button role="menuitem" data-cmd="exportCsv"><svg class="ic"><use href="#i-csv"/></svg>Export CSV</button>
+          </div>
+        </div>
+        <div class="lbl">Export</div>
+      </div>
+      <div class="rb-group">
+        <div class="rb-file">
+
+          <div class="split rb-lead">
+            <button class="big rb-primary" data-cmd="addPeople"
+                    title="Add one person at a time — photo, name, grade and group">
+              <svg class="ic"><use href="#i-group-add"/></svg><span>Add people</span>
+            </button>
+            <button class="split-toggle rb-primary-toggle" id="addMenuBtn" aria-haspopup="menu" aria-expanded="false"
+                    aria-controls="addMenu" title="Other ways to add people">
+              <svg class="ic"><use href="#i-caret"/></svg>
+            </button>
+            <div class="menu" id="addMenu" role="menu" hidden>
+              <button role="menuitem" data-cmd="pasteList"><svg class="ic"><use href="#i-paste"/></svg>Add list…</button>
+              <button role="menuitem" data-cmd="importCsv"><svg class="ic"><use href="#i-csv"/></svg>Import CSV…</button>
+            </div>
+          </div>
+
+          <button class="rb-mini danger" data-cmd="clearRoster"
+                  title="Remove everyone from this document, keeping the grades and the design">
+            <svg class="ic"><use href="#i-delete"/></svg>Clear roster
+          </button>
+        </div>
+        <div class="lbl">People</div>
+      </div>
+      <input type="file" id="fileSwap" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden>
+
+      <div class="rb-group">
+        <div class="rb-file info-actions">
+          <button class="rb-mini" id="tourBtn" data-cmd="tour"
+                  title="A short guided tour on a sample roster. Your document is set aside and comes back untouched.">
+            <svg class="ic"><use href="#i-animated-images"/></svg>Tour
+          </button>
+          <button class="rb-mini" data-cmd="infoTips" title="Shortcuts, tips and browser notes">
+            <svg class="ic"><use href="#i-tips"/></svg>Tips
+          </button>
+          <button class="rb-mini" data-cmd="infoPrivacy" title="Where your data lives, and how to handle roster files">
+            <svg class="ic"><use href="#i-privacy"/></svg>Privacy
+          </button>
+          <button class="rb-mini" data-cmd="infoBug" title="How to report a problem, and what counts as one">
+            <svg class="ic"><use href="#i-bug-report"/></svg>Bug report
+          </button>
+          <button class="big rb-lead3" data-cmd="infoAbout" title="Version, licence and attribution">
+            <svg class="ic"><use href="#i-copyright"/></svg><span>About</span>
+          </button>
+          <button class="rb-mini info-apps" data-cmd="infoApps" title="The other FORM apps — small single-file tools that extend your Office workflow">
+            <svg class="ic"><use href="#i-extension"/></svg>More apps
+          </button>
+        </div>
+        <div class="lbl">Info</div>
+      </div>
+    </div>
+
+    <div class="rb-pane" data-pane="grades" id="pane-grades" role="tabpanel" aria-labelledby="tab-grades" tabindex="0">
+      <div class="rb-group">
+        <div class="rb-file">
+          <button class="big rb-lead" data-cmd="addGrade" title="Names the grade, then adds it after the last one">
+            <svg class="ic"><use href="#i-floor"/></svg><span>Add grade</span>
+          </button>
+          <button class="rb-mini" id="templatesBtn" aria-haspopup="menu" aria-expanded="false"
+                  aria-controls="templatesMenu"
+                  title="Replace the grade structure and set the layout and colours from a ready-made template">
+            <svg class="ic"><use href="#i-cards-star"/></svg>Templates<svg class="ic"><use href="#i-caret"/></svg>
+          </button>
+          <button class="rb-mini danger" data-cmd="clearGrades"
+                  title="Remove every grade from this document">
+            <svg class="ic"><use href="#i-delete"/></svg>Clear grades
+          </button>
+          <button class="big rb-lead3" data-cmd="groups" title="Reorder or rename the groups people are in — the optional second dimension, shown in each person's subline and as the rows of the Matrix layout">
+            <svg class="ic"><use href="#i-circles"/></svg><span>Group <span class="badge-2d" aria-hidden="true">2D</span></span>
+          </button>
+        </div>
+        <div class="lbl">Edit</div>
+      </div>
+
+      <div class="rb-group" style="flex:0 0 auto;min-width:max-content;padding-right:0;border-right:none">
+        <div id="tiers" class="tier-strip"></div>
+        <span class="sr-only" id="gradeDragHelp">Drag grades to reorder them, or open a grade and use Move left or Move right.</span>
+        <div class="lbl">Current grades</div>
+      </div>
+
+      <div class="gmenu" id="gradePanel" role="dialog" aria-labelledby="gradePanelTitle" hidden>
+        <div class="gmenu-head">
+          <b id="gradePanelTitle"></b>
+          <button class="ghost" id="gradePanelClose" title="Close" aria-label="Close grade settings">
+            <svg class="ic"><use href="#i-close"/></svg>
+          </button>
+        </div>
+        <div id="gradePanelBody"></div>
+      </div>
+    </div>
+
+    <div class="rb-pane" data-pane="design" id="pane-design" role="tabpanel" aria-labelledby="tab-design" tabindex="0">
+      <div class="rb-group">
+        <div class="style-grid">
+          <button class="style-command style-tall" id="layoutBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="layoutMenu">
+            <svg class="ic"><use href="#i-layout"/></svg><span class="style-label">Layout</span><svg class="ic style-caret"><use href="#i-caret"/></svg>
+          </button>
+          <div class="style-stack stack-narrow">
+            <button class="style-command style-mini" id="densityBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="densityMenu">
+              <svg class="ic"><use href="#i-spacing"/></svg><span class="style-label">Spacing</span><svg class="ic style-caret"><use href="#i-caret"/></svg>
+            </button>
+            <button class="style-command style-mini" id="angleBtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="anglePop" title="Angle">
+              <svg class="ic"><use href="#i-angle"/></svg><span class="style-label">Angle</span><svg class="ic style-caret"><use href="#i-caret"/></svg>
+            </button>
+          </div>
+          <button class="style-command style-tall" id="pageBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="pageMenu">
+            <svg class="ic"><use href="#i-page"/></svg><span class="style-label">Page</span><svg class="ic style-caret"><use href="#i-caret"/></svg>
+          </button>
+          <button class="style-command style-tall" id="headerBtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="headerPop">
+            <svg class="ic"><use href="#i-header"/></svg><span class="style-label">Header</span><svg class="ic style-caret"><use href="#i-caret"/></svg>
+          </button>
+          <div class="style-stack">
+            <button class="style-command style-mini" id="labelsBtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="labelsPop">
+              <svg class="ic"><use href="#i-label"/></svg><span class="style-label">Grade labels</span><svg class="ic style-caret"><use href="#i-caret"/></svg>
+            </button>
+            <button class="style-command style-mini" id="nameLabelsBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="nameLabelsMenu">
+              <svg class="ic"><use href="#i-badge"/></svg><span class="style-label">Name labels</span><svg class="ic style-caret"><use href="#i-caret"/></svg>
+            </button>
+          </div>
+        </div>
+        <select class="style-source" id="layout" hidden aria-hidden="true"><option value="pyramid">Pyramid</option><option value="tornado">Tornado</option><option value="histogram">Histogram</option><option value="swimlanes">Swimlanes</option><option value="hive">Hive</option><option value="matrix">Matrix</option></select>
+        <select class="style-source" id="density" hidden aria-hidden="true"><option value="tight">Tight</option><option value="balanced">Balanced</option><option value="airy">Airy</option></select>
+        <select class="style-source" id="page" hidden aria-hidden="true"><option value="landscape">Landscape</option><option value="portrait">Portrait</option><option value="square">Square</option></select>
+        <select class="style-source" id="nameLabelPosition" hidden aria-hidden="true"><option value="below">Below photo</option><option value="next">Next to photo</option></select>
+        <select class="style-source" id="nameBold" hidden aria-hidden="true"><option value="given">First names</option><option value="family">Last name</option><option value="all">Whole name</option><option value="none">None</option></select>
+        <div class="lbl">Layout</div>
+      </div>
+      <div class="rb-group">
+        <div class="style-grid">
+
+          <button class="style-command style-tall style-accent" id="accentBtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="accentPop">
+            <svg class="ic"><use href="#i-colors"/></svg><span class="style-swatch" id="accentSwatch"></span><span class="style-label">Accent</span><svg class="ic style-caret"><use href="#i-caret"/></svg>
+          </button>
+          <div class="style-stack">
+            <button class="style-command style-mini" id="bgBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="bgMenu">
+              <svg class="ic"><use href="#i-background"/></svg><span class="style-label">Background</span><svg class="ic style-caret"><use href="#i-caret"/></svg>
+            </button>
+            <button class="style-command style-mini" id="ringBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="ringMenu">
+              <svg class="ic"><use href="#i-ring"/></svg><span class="style-label">Photo ring</span><svg class="ic style-caret"><use href="#i-caret"/></svg>
+            </button>
+          </div>
+        </div>
+        <select class="style-source" id="bg" hidden aria-hidden="true"><option value="white">White</option><option value="transparent">Transparent (PNG &amp; SVG)</option></select>
+        <select class="style-source" id="ring" hidden aria-hidden="true"><option value="none">None</option><option value="accent">Accent</option><option value="white">White</option></select>
+        <div class="lbl">Colour</div>
+      </div>
+      <div class="rb-group">
+        <div class="style-grid">
+          <button class="style-command style-tall" id="fontBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="fontMenu">
+            <svg class="ic"><use href="#i-brand-family"/></svg><span class="style-label">Font</span><svg class="ic style-caret"><use href="#i-caret"/></svg>
+          </button>
+          <button class="style-command style-tall" id="textBtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="textPop">
+            <span class="style-warn" id="textWarnBadge" hidden>!</span><svg class="ic"><use href="#i-text"/></svg><span class="style-label">Colour</span><svg class="ic style-caret"><use href="#i-caret"/></svg>
+          </button>
+        </div>
+        <select class="style-source" id="font" hidden aria-hidden="true"><option value="open-sans">Open Sans</option><option value="segoe-ui">Segoe UI</option><option value="roboto">Roboto</option><option value="helvetica">Helvetica</option><option value="arial">Arial</option></select>
+        <div class="lbl">Text</div>
+      </div>
+    </div>
+
+  </div>
+</div>

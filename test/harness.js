@@ -1,256 +1,46 @@
-/* Headless harness for tierform_app.html.
- *
- * Extracts computeLayout and its dependencies straight out of the HTML, stubs
- * the canvas text-measurement context, and asserts real invariants. Syntax
- * checking is NOT enough here: the known failure mode is NaN geometry in a
- * file that parses perfectly, which shows up as a blank chart.
- *
- * Run:  node test/harness.js
- *   or: osascript -l JavaScript test/harness.js     (macOS, no node needed)
- */
-
-/* ---------------------------------------------------------- file loading */
-
-function readFile(path){
-  if(typeof require !== "undefined"){                 // node
-    return require("fs").readFileSync(path, "utf8");
+const fs = require("node:fs");
+const path = require("node:path");
+const readFile = file => fs.readFileSync(file, "utf8");
+const here = () => path.resolve(__dirname, "..") + "/";
+const MEAS_LOG = [], DRAWN = [];
+const meas = {
+  font: "",
+  measureText(text){
+    const px = parseFloat(/([\d.]+)px/.exec(this.font)?.[1] || 12);
+    MEAS_LOG.push({font: this.font, text: String(text ?? "")});
+    return {width: String(text ?? "").length * px * 0.5};
   }
-  ObjC.import("Foundation");                          // JavaScriptCore / JXA
-  return $.NSString.stringWithContentsOfFileEncodingError(
-    path, $.NSUTF8StringEncoding, null).js;
-}
-function here(){
-  if(typeof __dirname !== "undefined") return __dirname + "/../";
-  ObjC.import("Foundation");
-  const cwd = $.NSFileManager.defaultManager.currentDirectoryPath.js;
-  return cwd + "/";
-}
-
-const HTML = readFile(here() + "tierform_app.html");
-const SCRIPT = /<script>([\s\S]*)<\/script>/.exec(HTML)[1];
-
-/* ---------------------------------------------------------- extraction */
-
-/* Brace and paren counting runs over a MASK of the source, never over the
-   source itself: a "{" inside a comment, a string or a regex is not a brace,
-   and counting it ends a slice early — on a fragment that may still parse, so
-   the suite goes green having tested something that is not the function. The
-   mask is the same LENGTH as the source and keeps every newline, so an index
-   found in it addresses the same character in the original; slices are always
-   cut from the ORIGINAL, or every extracted function reaches new Function()
-   with its strings blanked out.
-   Duplicated in four suites. test/fixtures.js §0 asserts the copies are
-   byte-identical and carries the rest of the reasoning — which literals the
-   mask has to know about, and why. */
-function maskLiterals(src){
-  const out = src.split(""), n = src.length;
-  const sp = k => { if(out[k] !== "\n") out[k] = " "; };
-
-  const REWORD = /^(return|typeof|instanceof|in|of|new|delete|void|case|do|else|yield|await)$/;
-  const stack = [{tmpl:false, depth:0}];
-  let value = false;
-  let i = 0;
-  while(i < n){
-    const top = stack[stack.length - 1], c = src[i];
-
-    if(top.tmpl){
-      if(c === "\\"){ sp(i); if(i + 1 < n) sp(i + 1); i += 2; continue; }
-      if(c === "`"){ sp(i); i++; stack.pop(); value = true; continue; }
-      if(c === "$" && src[i + 1] === "{"){
-        sp(i); stack.push({tmpl:false, depth:0}); i += 2; value = false; continue;
-      }
-      sp(i); i++; continue;
-    }
-
-    if(c === "/" && src[i + 1] === "/"){
-      while(i < n && src[i] !== "\n"){ sp(i); i++; }
-      continue;
-    }
-    if(c === "/" && src[i + 1] === "*"){
-      const e = src.indexOf("*/", i + 2), end = e < 0 ? n : e + 2;
-      while(i < end){ sp(i); i++; }
-      continue;
-    }
-    if(c === '"' || c === "'"){
-      let j = i + 1;
-      while(j < n && src[j] !== c && src[j] !== "\n") j += src[j] === "\\" ? 2 : 1;
-      if(j < n && src[j] === c){ while(i <= j){ sp(i); i++; } }
-      else i++;
-      value = true; continue;
-    }
-    if(c === "`"){ sp(i); stack.push({tmpl:true, depth:0}); i++; continue; }
-    if(c === "/" && !value){
-      let j = i + 1, cls = false, end = -1;
-      for(; j < n; j++){
-        const ch = src[j];
-        if(ch === "\n") break;
-        if(ch === "\\"){ j++; continue; }
-        if(cls){ if(ch === "]") cls = false; continue; }
-        if(ch === "[") cls = true;
-        else if(ch === "/"){
-          j++;
-          while(j < n && /[A-Za-z]/.test(src[j])) j++;
-          end = j; break;
-        }
-      }
-      if(end > 0){ while(i < end){ sp(i); i++; } value = true; continue; }
-    }
-    if(/[A-Za-z0-9_$]/.test(c)){
-      let j = i;
-      while(j < n && /[A-Za-z0-9_$]/.test(src[j])) j++;
-      value = !REWORD.test(src.slice(i, j));
-      i = j; continue;
-    }
-    if(c === "}" && top.depth === 0 && stack.length > 1){
-      stack.pop(); i++; value = true; continue;
-    }
-    if(c === "{"){ top.depth++; value = false; i++; continue; }
-    if(c === "}"){ top.depth--; value = false; i++; continue; }
-    if(c === ")" || c === "]"){ value = true; i++; continue; }
-    if(c === " " || c === "\t" || c === "\n" || c === "\r"){ i++; continue; }
-    value = false; i++;
-  }
-  return out.join("");
-}
-const MASK = maskLiterals(SCRIPT);
-
-/* pull `function name(...){...}` out of the source by brace matching */
-function grabFn(name){
-  const start = MASK.search(new RegExp("(^|\\n)(async\\s+)?function\\s+" + name + "\\s*\\("));
-  if(start < 0) throw new Error("harness: function " + name + " not found — was it renamed?");
-  let i = MASK.indexOf("{", start), depth = 0;
-  for(let j = i; j < MASK.length; j++){
-    const c = MASK[j];
-    if(c === "{") depth++;
-    else if(c === "}"){ depth--; if(!depth) return SCRIPT.slice(start, j + 1); }
-  }
-  throw new Error("harness: unbalanced braces reading " + name);
-}
-/* pull `const NAME = ...;` up to the semicolon that closes it */
-function grabConst(name){
-  const re = new RegExp("(^|\\n)const\\s+" + name + "\\s*=");
-  const m = re.exec(MASK);
-  if(!m) throw new Error("harness: const " + name + " not found — was it renamed?");
-  const start = m.index + (m[1] ? 1 : 0);
-  let depth = 0;
-  for(let j = start; j < MASK.length; j++){
-    const c = MASK[j];
-    if("{[(".includes(c)) depth++;
-    else if("}])".includes(c)) depth--;
-    else if(c === ";" && depth === 0) return SCRIPT.slice(start, j + 1);
-  }
-  throw new Error("harness: unterminated const " + name);
-}
-
-const CONSTS = ["FONT","FONTS","PAGES","ANGLES","DENSITY","G","SW","HV","MX","ZOOM_MAX","uid",
-                "LIMITS","ANCHORS","HEX6"];
-/* Both renderers now sanitise on the way out — xmlText/xmlAttr for the SVG
-   string, paint() for every colour, validatePhoto() for every image href — so
-   those come along or toSVG/toCanvas cannot be extracted at all. */
-const FNS = ["xmlText","xmlAttr","paint","validatePhoto","oneOf","canvasBlob","toPDF",
-             "splitName","initials","tierOf","tierRole","subline",
-             "withAlpha","angleIndex","codeParts","frameRect","frameLimit",
-             /* computeLayout is now a dispatcher on state.layout; the pyramid,
-                tornado and histogram geometry all live behind the shared
-                band-stack machinery (buildBandGroups, buildBandStack,
-                emitHeaderTexts, emitBandPeople) that computeTriangleLayout and
-                computeHistogramLayout both call, so all of it comes along or
-                the dispatcher calls a function that is not here. */
-             "clampFrame","computeLayout","gradeHeadingTexts",
-             "buildBandGroups","buildBandStack","emitHeaderTexts","emitBandPeople",
-             "computeTriangleLayout","computeHistogramLayout",
-             "computePyramidLayout","computeTornadoLayout","computeSwimlaneLayout",
-             "computeHiveLayout","computeMatrixLayout",
-             /* nameSegs is the one place a name's Bold weighting is chosen;
-                the geometry engines and fitName call it, so it comes along
-                with them or they cannot be extracted at all. */
-             "nameSegs","ellipsize","fitName","toSVG","toCanvas",
-             /* the shared measurement helpers the geometry engines call
-                while sizing a person's label and the header text. */
-             "personLabelWidth","headNeedWidth",
-             /* the one function that turns state.font into a drawable stack;
-                personLabelWidth, headNeedWidth, gradeHeadingTexts and both
-                geometry engines all call it. */
-             "docFont",
-             "normalizeGradeLinks",
-             /* subline reads a person's group through groupLabel, which reads
-                state.groups through the same id-matching policy resolveGroupId
-                writes with (and pruneGroups garbage-collects). All four come
-                along together or subline cannot be extracted at all. */
-             "newGroup","resolveGroupId","groupLabel","pruneGroups","clampText"];
-
-/* Stubs stand in for the browser. measureText is the important one: every
-   width in the layout is driven by it, so it must return finite numbers. Its
-   width MODEL is length-only — length * px * 0.5 — and does not react to the
-   weight token in meas.font at all, so it cannot tell a 600 from a 400: two
-   settings that measure the same characters always come out the same width
-   here no matter which weight either engine actually used. MEAS_LOG exists
-   because of that gap. It is not a second width model — it changes nothing
-   about what measureText returns — it is a record of every (font, text) pair
-   actually passed to it, which is what lets a test read the WEIGHT a measure
-   site used back out, instead of trying to infer it from a width the stub
-   cannot vary. */
-const PREAMBLE = `
-  let state = null;
-  const MEAS_LOG = [];
-  const meas = {
-    font: "",
-    measureText(t){
-      const px = parseFloat(/([\\d.]+)px/.exec(this.font) ? /([\\d.]+)px/.exec(this.font)[1] : 12);
-      MEAS_LOG.push({font: this.font, text: String(t == null ? "" : t)});
-      return {width: String(t == null ? "" : t).length * px * 0.5};
-    }
-  };
-  const fontsReady = Promise.resolve();
-  const DRAWN = [];                       // every drawImage the canvas renderer makes
-  function loadImg(src){ return Promise.resolve({__img: src}); }
-  /* JPEG_BYTES stands in for the encoder output: toPDF only has to embed it
-     verbatim and get the byte offsets right, which is exactly what breaks. */
-  const JPEG_BYTES = new Uint8Array([0xFF,0xD8,0xFF,0xE0,0,16,74,70,73,70,0,1,1,0,0,1,0,1,0,0,0xFF,0xD9]);
-  /* JavaScriptCore has no TextEncoder; toPDF only ever encodes ASCII PDF
-     syntax, so a byte-per-char encoder is exactly equivalent here. */
-  function TextEncoder(){
-    this.encode = function(str){
-      const out = new Uint8Array(str.length);
-      for(let i = 0; i < str.length; i++) out[i] = str.charCodeAt(i) & 0xFF;
-      return out;
-    };
-  }
-  function Blob(parts, opts){
-    this.parts = parts; this.type = (opts && opts.type) || "";
-    this.arrayBuffer = function(){ return Promise.resolve(JPEG_BYTES.buffer); };
-  }
-  const document = {
-    createElement(){ return {
-      width: 0, height: 0,
-      getContext(){ return CTX; },
-      toDataURL(){ return "data:,"; },
-      toBlob(cb, type, q){ cb(new Blob([JPEG_BYTES], {type: type})); }
-    }; },
-    getElementById(){ return {textContent: ""}; }
-  };
-  const CTX = {
-    font: "", textAlign: "", textBaseline: "", fillStyle: "", strokeStyle: "", lineWidth: 0,
-    save(){}, restore(){}, scale(){}, translate(){},
-    beginPath(){}, closePath(){}, moveTo(){}, lineTo(){}, arc(){}, rect(){}, roundRect(){},
-    clip(){}, fill(){}, stroke(){}, fillRect(){}, fillText(){},
-    measureText(t){ return meas.measureText(t); },
-    drawImage(img, x, y, w, h){ DRAWN.push({src: img && img.__img, x: x, y: y, w: w, h: h}); }
-  };
-`;
-
-const MODULE = new Function(
-  PREAMBLE +
-  CONSTS.map(grabConst).join("\n") + "\n" +
-  FNS.map(grabFn).join("\n") + "\n" +
-  "return {computeLayout, computePyramidLayout, computeTornadoLayout, computeHistogramLayout, computeSwimlaneLayout, computeHiveLayout, computeMatrixLayout, ellipsize," +
-  " nameSegs, fitName," +
-  " toSVG, toCanvas, toPDF, frameRect, frameLimit, clampFrame," +
-  " newGroup, resolveGroupId, groupLabel, pruneGroups, subline," +
-  " ZOOM_MAX, PAGES, G, SW, HV, DRAWN, MEAS_LOG, JPEG_BYTES, setState(s){ state = s; }};"
-)();
-
-/* ---------------------------------------------------------- assertions */
+};
+const JPEG_BYTES = new Uint8Array([255,216,255,224,0,16,74,70,73,70,0,1,1,0,0,1,0,1,0,0,255,217]);
+const NativeBlob = globalThis.Blob;
+globalThis.Blob = class extends NativeBlob {
+  constructor(parts, options){ super(parts, options); this.parts = parts; }
+};
+globalThis.Image = class {
+  set src(value){ this.__img = value; queueMicrotask(() => this.onload()); }
+};
+const CTX = {
+  save(){}, restore(){}, scale(){}, translate(){}, beginPath(){}, closePath(){},
+  moveTo(){}, lineTo(){}, arc(){}, rect(){}, roundRect(){}, clip(){}, fill(){},
+  stroke(){}, fillRect(){}, fillText(){},
+  measureText(text){ return meas.measureText(text); },
+  drawImage(img,x,y,w,h){ DRAWN.push({src:img.__img,x,y,w,h}); }
+};
+globalThis.document = {
+  createElement(){ return {width:0,height:0,getContext(){return CTX;},
+    toBlob(callback,type){callback(new Blob([JPEG_BYTES],{type}));}}; }
+};
+const MODULE = {
+  ...require("../src/engine/index.js").createLayoutEngine(meas),
+  ...require("../src/engine/constants.js"),
+  ...require("../src/model/framing.js"),
+  ...require("../src/model/entities.js"),
+  ...require("../src/model/labels.js"),
+  ...require("../src/render/svg.js"),
+  ...require("../src/render/canvas.js"),
+  ...require("../src/render/pdf.js"),
+  meas, DRAWN, MEAS_LOG, JPEG_BYTES
+};
 
 let passed = 0;
 const failures = [];
@@ -314,7 +104,7 @@ function baseState(tiers, people){
   });
   return st;
 }
-function layout(st){ MODULE.setState(st); return MODULE.computeLayout(st); }
+function layout(st){ return MODULE.computeLayout(st); }
 
 const t1 = tier("P", "Partner");
 const t2 = tier("SA", "Senior Assistant", {fill: "white", attach: true, align: "right"});
@@ -352,7 +142,7 @@ const LAYOUT_PROFILES = [
 for(const [label, roster] of Object.entries(CASES)){
   for(const kind of ["pyramid","tornado","histogram","swimlanes","hive","matrix"]){
     for(const profile of LAYOUT_PROFILES){
-      const st = {...JSON.parse(JSON.stringify(roster)), ...profile, layout:kind};
+      const st = {...structuredClone(roster), ...profile, layout:kind};
       const bad = [];
       allFinite(layout(st), "L", bad);
       check(bad.length === 0, "finite " + kind + " geometry: " + label + " / "
@@ -681,8 +471,8 @@ async function rendererAgreementFor(kind){
   ];
 
   for(const [label, base] of shapes){
-    const via = st => { MODULE.setState(st); return JSON.stringify(MODULE.computeLayout(st)); };
-    const direct = st => { MODULE.setState(st); return JSON.stringify(engine(st)); };
+    const via = st => { return JSON.stringify(MODULE.computeLayout(st)); };
+    const direct = st => { return JSON.stringify(engine(st)); };
     const clone = () => JSON.parse(JSON.stringify(base));
 
     const named = clone(); named.layout = "pyramid";
@@ -705,7 +495,6 @@ async function rendererAgreementFor(kind){
   {
     const st = baseState([t1, t2, t3], [person(t1.id, {name: "Svg One"}), person(t3.id)]);
     st.layout = "pyramid";
-    MODULE.setState(st);
     const norm = s => { let i = 0; return s.replace(/c[a-z0-9]{4,}/g, () => "cID" + (i++)); };
     const a = norm(MODULE.toSVG(MODULE.computeLayout(st)));
     const b = norm(MODULE.toSVG(MODULE.computePyramidLayout(st)));
@@ -727,8 +516,8 @@ async function rendererAgreementFor(kind){
       ["no grades", baseState([], [])]
     ];
     for(const [label, base] of shapes){
-      const via = st => { MODULE.setState(st); return JSON.stringify(MODULE.computeLayout(st)); };
-      const direct = st => { MODULE.setState(st); return JSON.stringify(engine(st)); };
+      const via = st => { return JSON.stringify(MODULE.computeLayout(st)); };
+      const direct = st => { return JSON.stringify(engine(st)); };
       const named = JSON.parse(JSON.stringify(base)); named.layout = "tornado";
       eq(via(named), direct(JSON.parse(JSON.stringify(base))),
          "dispatch: layout tornado gives exactly what computeTornadoLayout gives — " + label);
@@ -750,7 +539,6 @@ async function rendererAgreementFor(kind){
   const drawAs = kind => {
     const st = JSON.parse(JSON.stringify(shapeBase));
     st.layout = kind;
-    MODULE.setState(st);
     return MODULE.computeLayout(st);
   };
   const P = drawAs("pyramid"), T = drawAs("tornado");
@@ -790,7 +578,7 @@ async function rendererAgreementFor(kind){
 }
 
 {
-  const swim = st => { st.layout = "swimlanes"; MODULE.setState(st); return MODULE.computeLayout(st); };
+  const swim = st => { st.layout = "swimlanes"; return MODULE.computeLayout(st); };
   const lanesOf = L => L.bands.slice(1);
 
   const headingsOf = (L, band) => {

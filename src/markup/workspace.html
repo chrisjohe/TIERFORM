@@ -1,0 +1,60 @@
+<div id="app">
+
+  <div class="panel-rail" id="panelRail">
+    <button type="button" class="ghost panel-show" data-cmd="toggleRoster" aria-label="Show the roster panel" title="Show the roster panel">
+      <svg class="ic"><use href="#i-panel-open"/></svg>
+    </button>
+  </div>
+  <aside class="panel">
+
+    <input type="file" id="jsonPick" accept="application/json,.json" hidden>
+    <input type="file" id="csvPick" accept=".csv,text/csv" hidden>
+
+    <section class="blk">
+      <h2>Roster<button class="ghost panel-hide" data-cmd="toggleRoster" aria-label="Hide the roster panel" title="Hide the roster panel"><svg class="ic"><use href="#i-panel-close"/></svg></button></h2>
+
+      <div class="p-search" id="rosterSearchRow" hidden>
+        <input type="text" id="rosterSearch" placeholder="Search the roster" aria-label="Search the roster">
+        <button type="button" class="ghost p-search-clear" id="rosterSearchClear" aria-label="Clear the search" title="Clear the search" hidden><svg class="ic"><use href="#i-close"/></svg></button>
+      </div>
+      <p class="p-search-count" id="rosterCount" role="status" hidden></p>
+      <div id="roster"></div>
+    </section>
+
+    <section class="blk" style="border-bottom:none">
+      <h2>Add people</h2>
+      <button type="button" class="drop" id="drop">
+        <b>Drop a photo here to add its person</b> — several at once start an import,
+        or click to add someone<br>
+        <svg class="ic"><use href="#i-info"/></svg>Dropped file names become names: <code>Vorname_Nachname.jpg</code>
+      </button>
+    </section>
+  </aside>
+
+  <main class="stage">
+    <div class="warnbar" id="legibility" role="status" hidden></div>
+
+    <div class="warnbar" id="neverSaved" role="status" hidden></div>
+    <div class="canvas-wrap" id="dropZone"><div class="sheet" id="sheet"></div></div>
+    <div class="sr-only" id="chartText"></div>
+  </main>
+</div>
+
+<div class="statusbar">
+
+  <span class="tour-mark" id="tourMark">Tour · sample roster</span>
+  <span id="hint"></span>
+
+  <span class="opening" id="opening" role="status" aria-live="polite" hidden></span>
+  <span class="sp"></span>
+
+  <span class="preview-note" id="previewNote" hidden
+        title="The chart on screen is a live preview. Copy PNG renders at 150 dpi, Export PNG and PDF at 300 dpi.">
+    <svg class="ic" aria-hidden="true"><use href="#i-info"/></svg>Live preview
+    <span id="hintRight"></span>
+  </span>
+</div>
+
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+<div class="sr-only" id="alerts" role="alert" aria-live="assertive" aria-atomic="true"></div>

@@ -1,158 +1,56 @@
-# Publishes TIERFORM to GitHub Pages.
-#
-# The deployed page is the app, plus exactly one line. TIERFORM is one
-# self-contained HTML file with no build step, and hosting must not quietly
-# become one — so the only transformation this job is allowed to make is the
-# Content-Security-Policy meta element below, and the verification step proves
-# that by removing it again and comparing what is left, byte for byte, against
-# the file in the repository. If a step ever grows a second transformation, it
-# fails here rather than shipping a hosted build nobody compared against the
-# release.
-#
-# Why the policy is a <meta> element and not a header: GitHub Pages cannot
-# serve custom headers, and the header policy SECURITY.md documents therefore
-# cannot be applied here. What a meta element can still carry is the directive
-# SECURITY.md calls the one that matters most — connect-src 'none', which turns
-# the app's no-network promise into something the browser enforces rather than
-# something a reader has to take on trust. frame-ancestors, sandbox and
-# report-uri are ignored in a meta element and are deliberately not written
-# here; a directive that does nothing is worse than an absent one, because it
-# reads as protection.
-#
-# 'unsafe-inline' is unavoidable for script and style: the app IS one inline
-# script and two inline stylesheets. 'unsafe-eval' is NOT here and must never
-# be — the app contains no eval, no Function constructor, no Worker and no
-# WebAssembly, and if that ever changes the answer is to keep the policy and
-# fix the app.
-#
-# The local file still carries no CSP, deliberately, and CLAUDE.md says why.
-# This policy exists only in the hosted copy, injected here.
-#
-# The one path no test suite can reach is the download helper, which hands an
-# object URL to an <a download>: every export — PNG, PDF, SVG, CSV — goes
-# through it. CSP fetch directives do not govern that navigation today, but
-# "today" is not an assurance, so test/MANUAL.md carries a Hosted copy
-# checklist to be walked on the live URL after a policy change.
-
-name: Deploy to GitHub Pages
+name: Build and deploy GitHub Pages
 
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
-# One deployment at a time, and a queued one is not cancelled: the last push
-# should be what ends up live, not whichever run happened to survive.
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: false
-
-# Written once. The injection step builds the meta element from it and the
-# verification step rebuilds the same element to look for — so the policy that
-# ships and the policy that is checked cannot describe different things.
-env:
-  CSP: "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'"
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out the repository
-        uses: actions/checkout@v4
-
-      # Node 24 is what the suites are developed against locally. They also run
-      # under JavaScriptCore, and that dual-runtime property is deliberate — but
-      # CI picks one, and it picks the fast one.
-      - name: Set up Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '24'
-
-      # Five separate steps on purpose: a red run names the suite in its own
-      # line rather than in the middle of a combined log.
-      - name: Geometry suite
-        run: node test/harness.js
-      - name: DOM wiring suite
-        run: node test/dom.js
-      - name: Document model suite
-        run: node test/document.js
-      - name: Fixtures suite
-        run: node test/fixtures.js
-      - name: Import suite
-        run: node test/import.js
-
-      # The policy goes immediately after the charset declaration, which must
-      # stay inside the document's first 1024 bytes and so cannot be displaced.
-      # Every precondition is asserted rather than assumed: one anchor, and no
-      # CSP already present — a policy that had crept into the repository file
-      # would mean this workflow is no longer the only writer of one.
-      - name: Assemble the site, with the hosted copy's policy
-        run: |
-          node - <<'NODE'
-          const fs = require("fs");
-          const src = fs.readFileSync("tierform_app.html", "utf8");
-          const anchor = '<meta charset="utf-8">\n';
-
-          const anchors = src.split(anchor).length - 1;
-          if (anchors !== 1) throw new Error("expected exactly one charset anchor, found " + anchors);
-          if (src.includes("Content-Security-Policy"))
-            throw new Error("the repository file already carries a CSP — this workflow is no longer its only writer");
-
-          const meta = '<meta http-equiv="Content-Security-Policy" content="' + process.env.CSP + '">\n';
-          const out = src.replace(anchor, anchor + meta);
-          if (out.length !== src.length + meta.length) throw new Error("injection changed more than it added");
-
-          fs.mkdirSync("_site", { recursive: true });
-          fs.writeFileSync("_site/index.html", out);
-          fs.writeFileSync("_site/tierform_app.html", out);
-          console.log("injected: " + meta.trim());
-          NODE
-
-      # The claim this workflow makes in its own header, checked rather than
-      # trusted — and checked three ways, because each answers a different
-      # question. That the policy shipped is the policy declared above; that
-      # removing it leaves the repository's file byte for byte; and that the
-      # difference is one added line and nothing removed, which is the claim a
-      # reader of the header actually cares about.
-      - name: Verify the deployed file is the repository's file plus one known line
-        run: |
-          META="<meta http-equiv=\"Content-Security-Policy\" content=\"$CSP\">"
-          for f in _site/index.html _site/tierform_app.html; do
-            grep -Fqx "$META" "$f" \
-              || { echo "::error::$f does not carry the declared policy"; exit 1; }
-            grep -vFx "$META" "$f" > stripped.html
-            cmp tierform_app.html stripped.html \
-              || { echo "::error::$f differs from the repository file by more than the policy"; exit 1; }
-            added=$(diff tierform_app.html "$f" | grep -c '^>' || true)
-            removed=$(diff tierform_app.html "$f" | grep -c '^<' || true)
-            [ "$added" = "1" ] && [ "$removed" = "0" ] \
-              || { echo "::error::$f: expected 1 added and 0 removed lines, got $added added and $removed removed"; exit 1; }
-            echo "$f: the repository's file plus exactly one line, and that line is the policy"
-            rm -f stripped.html
-          done
-
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: git diff --exit-code -- tierform_app.html
+      - run: npm test
+      - run: npm run test:parity
+      - run: npx playwright install --with-deps chromium firefox webkit
+      - run: npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: failure()
         with:
-          enablement: true
-
-      - name: Upload the artifact
-        uses: actions/upload-pages-artifact@v3
+          name: browser-results
+          path: test-results/
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
         with:
           path: _site
 
   deploy:
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/configure-pages@v5
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

@@ -1,0 +1,83 @@
+{
+  "baseline": {
+    "commit": "7be5c66",
+    "version": "2026.8b",
+    "htmlSha256": "2c9f2b420d329e8d73ab96a2aeafd82069cf0841ebfe6d3f72c870a67164748e",
+    "fixtureSha256": "74c6b37917fe5957b81ca13d41c0a4db5e3b5598e51722a686fb1892ff8c7b98"
+  },
+  "serialization": "SHA-256 of UTF-8 records plus LF, in cases() order; generated clip IDs canonicalized by appearance",
+  "groups": {
+    "length:pyramid": {
+      "cases": 364,
+      "input": "ca0b7e9a3d0a2837cb1f2ee0749950d93d13d5ef3184005f443d6525bbb010d3",
+      "geometry": "75d9d9f8b04f0c6097a690b1398a489d4844728c12c6ae99e647ab2c961222c6",
+      "svg": "f23c6c87e25fafb795898819e23d7d5b40d27699970331b5df18b776071c42f9"
+    },
+    "length:tornado": {
+      "cases": 364,
+      "input": "07e8689d37e00728e703eeba72853c748d6a17fe184a0da57ac0a9ee9e71a682",
+      "geometry": "9c4fa02650f7b4ac4a758ad0d4c2487e3aa556bc8e997184304fe2917a46a7d2",
+      "svg": "ea605a06fc61a2a8e59322d802c475c212f1f806d8f56514bf7ce003a793d181"
+    },
+    "length:histogram": {
+      "cases": 364,
+      "input": "829c35bc7fbfecd1101a55f64c35b3b7dc92a3a976214da7e78200ae294ea593",
+      "geometry": "5a8f2e014fa22529ab45638d4d371479e1322e6eb9b8820757d94a6d93b38130",
+      "svg": "66ca67824818b4fb77bc6b57e56be47a7685e24bb30c2ce93ba09525c19bfc25"
+    },
+    "length:swimlanes": {
+      "cases": 364,
+      "input": "e554fe921074bb31b4aa64813950a2fc14433176a7c7e7ab426f132c03b75a04",
+      "geometry": "e9d3fd6400465c1f7e1f6888c4e00119dff01ea9a0f0874f5d246cdcf8601282",
+      "svg": "85c2668aacb991dfdf728128dddd9e6e36c400119ed1f8a905bf55129eb98b84"
+    },
+    "length:hive": {
+      "cases": 364,
+      "input": "26deee4cf349880a3b205e165c2c7f4c383d60d3bca32440d9934c4af1596072",
+      "geometry": "f1539b0fcfbbc8441326435ca2a24fb08002c9edf360b1a512ca84143c48e2cd",
+      "svg": "c31ee6485d46a2246ce2d3a240fca6853dd60829bdaf8c40cd3527a52112a752"
+    },
+    "length:matrix": {
+      "cases": 364,
+      "input": "22518aceb1ecdbe59a1c17fe550efa8bb0468c9942424ced554d22fa4381b5b5",
+      "geometry": "96f9af12fa37c610c529c2298c6257bfe9987c5df98b3983272110f42ae42e88",
+      "svg": "467810f78f55f5a72dadab3fc8c6d0d8fe58345c9baa23f578f008c9bd8ae2b6"
+    },
+    "weighted:pyramid": {
+      "cases": 364,
+      "input": "ca0b7e9a3d0a2837cb1f2ee0749950d93d13d5ef3184005f443d6525bbb010d3",
+      "geometry": "94ac743138ee721eb3fa61209b91369faaa50b159200ecd238a9ef8bab4f5498",
+      "svg": "9b84e46a08f26dfe85583c1734c37f735f1f28aa5ffce9564660f8071469da2c"
+    },
+    "weighted:tornado": {
+      "cases": 364,
+      "input": "07e8689d37e00728e703eeba72853c748d6a17fe184a0da57ac0a9ee9e71a682",
+      "geometry": "adbf9ffb0b297dd1ef40190c72c4ffdea9af93549de11ee91ead6cb551fdf180",
+      "svg": "672f77b564ce5c88c16279f5f87f6b22d07d4dcb6557ef8fea27c75fab65a67c"
+    },
+    "weighted:histogram": {
+      "cases": 364,
+      "input": "829c35bc7fbfecd1101a55f64c35b3b7dc92a3a976214da7e78200ae294ea593",
+      "geometry": "acc9a4c1f81e706e64be4e1a6ffa6b558a366b8783929a2f47277c02729a9133",
+      "svg": "0b556df47c25785ec6e4cbed453ee5020d2315fbdd0704e1e99f76ef8fa38c07"
+    },
+    "weighted:swimlanes": {
+      "cases": 364,
+      "input": "e554fe921074bb31b4aa64813950a2fc14433176a7c7e7ab426f132c03b75a04",
+      "geometry": "9f1f80fa586ca8ac35cf8d22de0506b43a95fb80745c4c5d187ecb70f84a55ce",
+      "svg": "7867d2666d7574ceac3b6367ec52bd487bfc859a739b98aea7c72d53264a6545"
+    },
+    "weighted:hive": {
+      "cases": 364,
+      "input": "26deee4cf349880a3b205e165c2c7f4c383d60d3bca32440d9934c4af1596072",
+      "geometry": "89aec4c5a5155edf95072512f703061980762d4ebba1d630e3377a5bef818074",
+      "svg": "9d3c62bf9fb5c66dd8429cc883e6b9340045f9b00ac8ad046a0bda70cff76de4"
+    },
+    "weighted:matrix": {
+      "cases": 364,
+      "input": "22518aceb1ecdbe59a1c17fe550efa8bb0468c9942424ced554d22fa4381b5b5",
+      "geometry": "9f7f8499acda76f6915c038980e775972172e2e861ea8441bc49b3b959748d5c",
+      "svg": "460db26d46fd7145655b815313afaae230853234f904eeb911e98337f0f3c2f3"
+    }
+  }
+}

@@ -11,7 +11,7 @@ function here(){
 }
 
 const ROOT   = here();
-const HTML   = readFile(ROOT + "tierform_app.html");
+const HTML   = readFile(ROOT + "_test/source.html");
 const SCRIPT = /<script>([\s\S]*)<\/script>/.exec(HTML)[1];
 
 function maskLiterals(src){
@@ -145,6 +145,11 @@ const M = new Function(PREAMBLE +
   " meas, toSVG, angleIndex, parseAndValidateRoster," +
   " validatePhoto, tierRole, groupLabel, resolveGroupId, setState(s){ state = s; }};")();
 
+if(typeof require !== "undefined"){
+  Object.assign(M, require("../src/engine/index.js").createLayoutEngine(M.meas));
+  M.toSVG = require("../src/render/svg.js").toSVG;
+  M.parseAndValidateRoster = require("../src/io/roster.js").parseAndValidateRoster;
+}
 
 let passed = 0;
 const failures = [];
@@ -253,7 +258,7 @@ try{
     check(running.length > 1000 && /REWORD/.test(running) && /stack\.pop\(\)/.test(running),
       "the function that answered the cases above is the whole mask — got "
       + running.length + " chars");
-    for(const file of ["harness.js", "fixtures.js", "document.js", "import.js"])
+    for(const file of ["fixtures.js", "document.js", "import.js"])
       check(copyOf(file) === running,
         "test/" + file + " carries that same maskLiterals, character for character"
         + " — a copy that drifts is a suite counting braces by different rules");

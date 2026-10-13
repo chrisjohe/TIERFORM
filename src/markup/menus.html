@@ -1,0 +1,108 @@
+<div class="menu" id="templatesMenu" role="menu" aria-label="Templates" hidden></div>
+<div class="menu style-menu" id="layoutMenu" role="menu" aria-label="Layout" hidden>
+  <button role="menuitemradio" aria-checked="false" data-style-select="layout" data-value="pyramid"><svg class="ic"><use href="#i-pyramid"/></svg>Pyramid</button>
+  <button role="menuitemradio" aria-checked="false" data-style-select="layout" data-value="tornado"><svg class="ic"><use href="#i-tornado"/></svg>Tornado</button>
+  <button role="menuitemradio" aria-checked="false" data-style-select="layout" data-value="histogram"><svg class="ic"><use href="#i-histogram"/></svg>Histogram</button>
+  <button role="menuitemradio" aria-checked="false" data-style-select="layout" data-value="swimlanes"><svg class="ic"><use href="#i-swimlanes"/></svg>Swimlanes</button>
+  <button role="menuitemradio" aria-checked="false" data-style-select="layout" data-value="hive"><svg class="ic"><use href="#i-hive"/></svg>Hive</button>
+  <button role="menuitemradio" aria-checked="false" data-style-select="layout" data-value="matrix"><svg class="ic"><use href="#i-matrix"/></svg>Matrix <span class="badge-2d" aria-hidden="true">2D</span></button>
+</div>
+<div class="menu style-menu" id="densityMenu" role="menu" aria-label="Spacing" hidden>
+  <button role="menuitemradio" aria-checked="false" data-style-select="density" data-value="tight"><svg class="ic"><use href="#i-tight"/></svg>Tight</button>
+  <button role="menuitemradio" aria-checked="false" data-style-select="density" data-value="balanced"><svg class="ic"><use href="#i-balanced"/></svg>Balanced</button>
+  <button role="menuitemradio" aria-checked="false" data-style-select="density" data-value="airy"><svg class="ic"><use href="#i-airy"/></svg>Airy</button>
+</div>
+<div class="menu style-menu" id="pageMenu" role="menu" aria-label="Page" hidden>
+  <button role="menuitemradio" aria-checked="false" data-style-select="page" data-value="landscape" title="Prints as ISO A3 at 300 dpi"><svg class="ic"><use href="#i-page-landscape"/></svg>Landscape</button>
+  <button role="menuitemradio" aria-checked="false" data-style-select="page" data-value="portrait" title="Prints as ISO A3 at 300 dpi"><svg class="ic"><use href="#i-page-portrait"/></svg>Portrait</button>
+  <button role="menuitemradio" aria-checked="false" data-style-select="page" data-value="square" title="Prints as 297 × 297 mm at 300 dpi"><svg class="ic"><use href="#i-page-square"/></svg>Square</button>
+</div>
+
+<div class="menu style-pop" id="accentPop" role="dialog" aria-label="Accent colour" hidden>
+  <div class="style-menu-group" role="group" aria-labelledby="accentSwatchGroup">
+    <span class="style-menu-group-title" id="accentSwatchGroup">Swatches</span>
+    <button class="accent-swatch" data-cmd="accentSwatch" data-accent="#003153" data-ink="#FFFFFF" title="#003153"><span class="accent-dot" style="--swatch:#003153"></span>Prussian Blue</button>
+    <button class="accent-swatch" data-cmd="accentSwatch" data-accent="#801818" data-ink="#FFFFFF" title="#801818"><span class="accent-dot" style="--swatch:#801818"></span>Falu Red</button>
+    <button class="accent-swatch" data-cmd="accentSwatch" data-accent="#602F6B" data-ink="#FFFFFF" title="#602F6B"><span class="accent-dot" style="--swatch:#602F6B"></span>Imperial Purple</button>
+    <button class="accent-swatch" data-cmd="accentSwatch" data-accent="#FF4F00" data-ink="#000000" title="#FF4F00"><span class="accent-dot" style="--swatch:#FF4F00"></span>International Orange</button>
+    <button class="accent-swatch" data-cmd="accentSwatch" data-accent="#004225" data-ink="#FFFFFF" title="#004225"><span class="accent-dot" style="--swatch:#004225"></span>British Racing Green</button>
+    <button class="accent-swatch" data-cmd="accentSwatch" data-accent="#848482" data-ink="#000000" title="#848482"><span class="accent-dot" style="--swatch:#848482"></span>Battleship Grey</button>
+    <button class="accent-swatch" data-cmd="accentSwatch" data-accent="#FADA5E" data-ink="#000000" title="#FADA5E"><span class="accent-dot" style="--swatch:#FADA5E"></span>Naples Yellow</button>
+    <button class="accent-swatch" data-cmd="accentSwatch" data-accent="#000000" data-ink="#FFFFFF" title="#000000"><span class="accent-dot" style="--swatch:#000000"></span>Vantablack</button>
+  </div>
+  <div class="style-menu-group" role="group" aria-labelledby="accentCustomGroup">
+    <span class="style-menu-group-title" id="accentCustomGroup">Custom</span>
+
+    <div class="style-colour-row accent-hex-row">
+      <label for="accentHex">Hex</label>
+      <input type="text" id="accentHex" maxlength="7" placeholder="#003153"
+             spellcheck="false" autocomplete="off"
+             aria-label="Accent colour as a hex value">
+    </div>
+
+    <label class="accent-more">
+      <svg class="ic"><use href="#i-palette"/></svg>More colours…
+      <input type="color" id="accent" aria-label="More colours">
+    </label>
+  </div>
+</div>
+<div class="menu style-menu" id="bgMenu" role="menu" aria-label="Background" hidden>
+  <button role="menuitemradio" aria-checked="false" data-style-select="bg" data-value="white">White</button>
+  <button role="menuitemradio" aria-checked="false" data-style-select="bg" data-value="transparent">Transparent (PNG &amp; SVG)</button>
+</div>
+<div class="menu style-menu" id="ringMenu" role="menu" aria-label="Photo ring" hidden>
+  <button role="menuitemradio" aria-checked="false" data-style-select="ring" data-value="none">None</button>
+  <button role="menuitemradio" aria-checked="false" data-style-select="ring" data-value="accent">Accent</button>
+  <button role="menuitemradio" aria-checked="false" data-style-select="ring" data-value="white">White</button>
+</div>
+
+<div class="menu style-menu" id="fontMenu" role="menu" aria-label="Font" hidden>
+  <button role="menuitemradio" aria-checked="false" data-style-select="font" data-value="open-sans" style="font-family:'Open Sans','Segoe UI',system-ui,Roboto,Helvetica,Arial,sans-serif">Open Sans<span class="style-warn" aria-hidden="true" hidden>!</span></button>
+  <button role="menuitemradio" aria-checked="false" data-style-select="font" data-value="segoe-ui" style="font-family:'Segoe UI',system-ui,Roboto,Helvetica,Arial,sans-serif">Segoe UI<span class="style-warn" aria-hidden="true" hidden>!</span></button>
+  <button role="menuitemradio" aria-checked="false" data-style-select="font" data-value="roboto" style="font-family:Roboto,'Segoe UI',system-ui,Helvetica,Arial,sans-serif">Roboto<span class="style-warn" aria-hidden="true" hidden>!</span></button>
+  <button role="menuitemradio" aria-checked="false" data-style-select="font" data-value="helvetica" style="font-family:Helvetica,'Helvetica Neue',Arial,system-ui,sans-serif">Helvetica<span class="style-warn" aria-hidden="true" hidden>!</span></button>
+  <button role="menuitemradio" aria-checked="false" data-style-select="font" data-value="arial" style="font-family:Arial,Helvetica,system-ui,sans-serif">Arial<span class="style-warn" aria-hidden="true" hidden>!</span></button>
+  <div class="font-legend" role="presentation" hidden><span class="style-warn" aria-hidden="true">!</span>font not installed</div>
+</div>
+<div class="menu style-menu" id="nameLabelsMenu" role="menu" aria-label="Name labels" hidden>
+  <div class="style-menu-group" role="group" aria-labelledby="namePositionGroup">
+    <span class="style-menu-group-title" id="namePositionGroup">Position</span>
+    <button role="menuitemradio" aria-checked="false" data-style-select="nameLabelPosition" data-value="below"><svg class="ic"><use href="#i-name-below"/></svg>Below photo</button>
+    <button role="menuitemradio" aria-checked="false" data-style-select="nameLabelPosition" data-value="next"><svg class="ic"><use href="#i-name-next"/></svg>Next to photo</button>
+  </div>
+  <div class="style-menu-group" role="group" aria-labelledby="nameDisplayGroup">
+    <span class="style-menu-group-title" id="nameDisplayGroup">Display</span>
+    <label class="style-check"><input type="checkbox" id="showPersonName">Display name</label>
+    <label class="style-check"><input type="checkbox" id="showPersonGrade">Display grade</label>
+    <label class="style-check"><input type="checkbox" id="showPersonGroup">Display group</label>
+  </div>
+  <div class="style-menu-group" role="group" aria-labelledby="nameBoldGroup">
+    <span class="style-menu-group-title" id="nameBoldGroup">Bold</span>
+    <button role="menuitemradio" aria-checked="false" data-style-select="nameBold" data-value="given">First names</button>
+    <button role="menuitemradio" aria-checked="false" data-style-select="nameBold" data-value="family">Last name</button>
+    <button role="menuitemradio" aria-checked="false" data-style-select="nameBold" data-value="all">Whole name</button>
+    <button role="menuitemradio" aria-checked="false" data-style-select="nameBold" data-value="none">None</button>
+  </div>
+</div>
+
+<div class="menu style-pop" id="headerPop" role="dialog" aria-label="Chart header" hidden>
+  <span class="style-menu-group-title">Chart header text</span>
+  <label class="field"><span>Title</span><input type="text" id="title" maxlength="200"></label>
+  <label class="field"><span>Right-hand label</span><input type="text" id="brand" maxlength="200" placeholder="e.g. your firm name"></label>
+</div>
+
+<div class="menu style-pop" id="labelsPop" role="dialog" aria-label="Grade labels" hidden>
+  <span class="style-menu-group-title">Display</span>
+  <label class="style-check"><input type="checkbox" id="showGradeCode">Display grade code</label>
+  <label class="style-check"><input type="checkbox" id="showGradeName">Display grade name</label>
+</div>
+<div class="menu style-pop" id="anglePop" role="dialog" aria-labelledby="anglePopTitle" hidden>
+  <b class="style-pop-title" id="anglePopTitle">Angle</b>
+  <input type="range" id="angle" min="0" max="4" step="1" aria-label="Angle">
+</div>
+<div class="menu style-pop" id="textPop" role="dialog" aria-label="Text colours" hidden>
+  <span class="style-menu-group-title">Colours</span>
+  <div class="style-colour-row"><label for="inkOnColour">On accent<span class="accent-dot" id="inkAccentDot"></span></label><input type="color" id="inkOnColour"></div>
+  <div class="style-colour-row"><label for="inkOnWhite">On white</label><input type="color" id="inkOnWhite"></div>
+  <span class="warn-chip" id="contrastWarn" role="status" hidden></span>
+</div>

@@ -1,59 +1,62 @@
 # Manual test plan and baseline
 
-Five automated suites cover geometry, DOM wiring, the document model, the
-roster fixtures and import validation. Three things they cannot cover, because
-there is no real browser in the loop: **whether the chart actually renders**, **whether PNG and PDF export**,
-and **whether the app is usable by keyboard and screenreader**. Those are the
-checklists below.
+The automated suites cover geometry, DOM wiring, document behavior and import
+validation. Browser tests also open photo fixtures, exercise all six layouts,
+download PNG, PDF, SVG and CSV, check keyboard/modal focus, responsive roster
+visibility, typing/Undo, tour restoration and hosted Copy PNG. Manual checks still cover detailed visual behavior, screenreaders, native
+browser permissions and the published site.
 
-Run the suites first — a manual pass over a build that fails them wastes an hour:
+Run the automated checks first:
 
 ```sh
-node test/harness.js     # geometry
-node test/dom.js         # DOM wiring, ids, house rules
-node test/document.js    # document model, undo, defaults()
-node test/fixtures.js    # roster files, and the roster panel it builds
-node test/import.js      # what the validator refuses and repairs
+npm ci
+npm run build
+npm run test:release
 ```
 
-No Node on the machine? On macOS every suite also runs under JavaScriptCore
-with no install at all — `osascript -l JavaScript test/<suite>.js` — the same
-assertions, only slower.
+The controller-isolation suites `document.js`, `fixtures.js` and `import.js`
+retain their JavaScriptCore fallback. The standard runner, native harness,
+integrity, frozen reference, artifact and browser checks use Node. See
+[Testing](../docs/TESTING.md) for coverage and verification limits.
 
 ---
 
 ## Baseline
 
-The table below records the current build's size, its history-memory cost and
-its suite counts, so a regression shows up as a number that moved. The last
-three rows are the ones to update.
+Recorded on October 12, 2026 after the modular refactor:
 
-| | Value |
-|---|---|
-| History memory, 30 people / 25 photos / 10 steps | 1.05 MB |
-| **Current build** — `tierform_app.html`, recorded 2026-08-13 | 956 719 bytes, 10 308 lines |
-| Suites | harness 15 389 · dom 3 076 · document 1 298 · fixtures 801 · import 777 = **21 341** |
-| App version | `const VERSION` and the About release label, both `2026.8b` |
+| Check | Result |
+| --- | --- |
+| Portable generated build | 750,328 bytes, 8,178 lines |
+| Standard suites | harness 1,680 · integrity 35 (10 contracts) · document 1,416 · fixtures 812 · import 708 = **4,651** assertion calls |
+| Direct contract tests | 13 module assertions and 8 artifact assertions |
+| Frozen original comparison | 4,368 geometry, SVG and input cases against commit `7be5c66` |
+| App version | `VERSION` and About both `2026.10a` |
 
-`tierform_app.html` is the deliverable. Timestamped working copies are banned
-from the project — version control is the checkpoint — and `test/dom.js` fails
-the build if README, NOTICE or the app itself names a `.backup-*.html` file.
+The hosted output is `_site/`; the portable output is `tierform_app.html`.
+Both come from `src/`. Edit source modules and rebuild rather than editing
+the generated HTML. The prior history-memory measurement was 1.05 MB for
+30 people, 25 photos and 10 steps; that measurement was not repeated here.
 
 ### What each fixture is for
 
-Measured, not assumed — these verdicts are what `test/fixtures.js` and
-`test/import.js` pin, and what a manual Open of each file must show:
+The table records synchronous structural validation unless the photo row
+explicitly describes decoding. A full browser Open also decodes photos and can
+report additional repairs: `current.json`, for example, adds five photo-size
+repairs because its declared 400 × 300 dimensions differ from the synthetic
+1 × 1 images. The structural repair totals below are not total browser Open
+repair counts.
 
 | Fixture | Verdict |
 |---|---|
-| `current.json` | accepted, 0 repairs |
-| `legacy.json` | accepted, 0 repairs — the validator fills in everything it omits; absent is not a repair |
+| `current.json` | accepted, 0 structural repairs |
+| `legacy.json` | accepted, 0 structural repairs — the validator fills in everything it omits; absent is not a repair |
 | `pyramid-zero.json` | accepted, **angle stays 0** — `0`, `false` and `""` are real choices, never "empty" |
 | `malformed.json` | refused: "the file is not valid JSON" |
 | `bad-refs.json` | **refused**: two grades share the id "dup" |
-| `bad-values.json` | accepted, **10 values repaired** and counted in the toast |
-| `injection.json` | accepted, **5 repairs, SVG clean** |
-| `unicode.json` | accepted, 0 repairs |
+| `bad-values.json` | accepted, **10 structural values repaired** and counted in the toast |
+| `injection.json` | accepted, **5 structural repairs, SVG clean** |
+| `unicode.json` | accepted, 0 structural repairs |
 | `photos.json` | accepted; 3 photos dropped as undecodable, 1 resized to its real dimensions |
 
 Every fixture that still reaches the renderer produces finite geometry and an
@@ -218,8 +221,7 @@ recording:
 - [ ] Pick only the unreadable file: the error *does* appear, and the status
       clears.
 
-**The roster carets reveal per panel.** `test/dom.js` §7 reads the rules; only
-a browser paints them:
+**The roster carets reveal per panel.** Check their painted behavior:
 - [ ] In touch emulation (a device profile with no hover), every row's caret is
       simply always visible — nothing hides, nothing reveals.
 - [ ] With a mouse, the carets are hidden at rest and appear — all rows at
@@ -732,8 +734,9 @@ machine's own font book must not matter to the chart:
 
 ## Accessibility
 
-Structure is asserted in `test/dom.js` §4d and behaviour in `test/fixtures.js`
-§6–7. What no static check can reach:
+ARIA references are checked by `test/dom.js`; controller behavior is checked
+in `test/fixtures.js`. Browser tests exercise ribbon keys and one modal
+focus/Escape flow. Check the remaining controls and assistive technology:
 
 - [ ] The whole app is operable with the keyboard alone.
 - [ ] Focus is always visible and moves in document order.
@@ -808,11 +811,9 @@ Check at roughly 1440, 1100, 820 and 380 px wide:
 `test/document.js` §16 owns the swap and the state machine — the demo document,
 `tourGoto`'s replay, the skip rule's live count, the three `run`s' own effects
 (each writing only its own field, Back reverting exactly that field), and the
-never-saved bar staying quiet about the demo's own dirt. `test/dom.js` §8 owns
-the static shape — the thirteen rows, their anchors, the CSS tokens, no
-em-dash anywhere in the copy. Neither reaches paint: whether the ring is
-actually where the maths says, whether a scroll event visibly keeps up,
-whether the dark scheme actually looks darker. That is this checklist.
+never-saved bar staying quiet about the demo's own dirt. Browser tests cover
+Escape/Close and document/history restoration. Check the ring positioning,
+scroll tracking and appearance manually:
 
 - [ ] Start ▸ Info ▸ Tour, and the start view's own Tour button, both open the
       tour on the sample roster ("Pearson Specter Litt"). The ring visibly
@@ -855,7 +856,7 @@ whether the dark scheme actually looks darker. That is this checklist.
 
 ## Browsers and targets
 
-`test/dom.js` §4f proves the no-network claim statically — no `fetch`, no
+`test/dom.js` checks forbidden network and storage capabilities statically — no `fetch`, no
 `XMLHttpRequest`, no `sendBeacon`, no `<form>`, and every external link carries
 `rel="noopener noreferrer"`. What it cannot prove is that a browser adds nothing
 of its own, so confirm once per browser with the network panel open:
@@ -873,9 +874,7 @@ Test the export set in each, opened from `file://`:
 | Chrome / Edge (macOS) | | | | | |
 | Chrome / Edge (Windows) | | | | | |
 
-The tab icon is the other thing that differs per browser, and no suite can see
-it: `test/dom.js` §4o2 proves the icon is the sprite's mark on a `--brand` tile,
-and nothing more. Recorded 2026-08-12 on Safari 26.5.2: a `file://` page gets
+The browser tab icon still needs a manual check. Recorded 2026-08-12 on Safari 26.5.2: a `file://` page gets
 **no** favicon of any kind — an SVG data URI, a PNG data URI and an external
 `.svg` were all blank in the tab, while the same page over `http://localhost`
 showed the mark. A blank Safari cell below is therefore the expected result and
@@ -951,9 +950,8 @@ previous hosted build without a byte of the program moving.
 
 There is no in-app dark-mode control by design — a toggle has nowhere to
 remember its answer, so the app follows `prefers-color-scheme` and Tips says
-so (`test/dom.js` pins that sentence). The suites prove the token pairs and
-the structure; the rest — tint visibility, UA-repainted controls, and the
-live scheme switch — is paint no suite reaches.
+so. Tint visibility, native controls and the live scheme switch remain
+manual visual checks.
 
 - [ ] With the app open, switch the OS appearance between light and dark: the
       chrome dims live, no reload needed. The sheet itself — and an exported

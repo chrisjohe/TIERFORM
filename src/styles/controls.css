@@ -1,0 +1,49 @@
+  .panel{
+    background:var(--surface);
+    border-right:1px solid var(--line);
+    overflow-y:auto;
+    display:flex;flex-direction:column;
+  }
+  section.blk{border-bottom:1px solid var(--line-2);padding:16px 22px 20px}
+  .blk > h2{
+    margin:0 0 12px;font-size:10.5px;font-weight:700;letter-spacing:.09em;
+    text-transform:uppercase;color:var(--mute);
+    display:flex;align-items:center;
+  }
+  .panel-hide{margin-left:8px;padding:2px 4px;border-color:var(--line-2)}
+  .panel-hide .ic{width:14px;height:14px}
+  label.field{display:block;margin-bottom:10px}
+  label.field[hidden]{display:none}
+  label.field > span{
+    display:block;font-size:11px;color:var(--mute);margin-bottom:4px;letter-spacing:.02em;
+  }
+  label.field-big > span{font-size:13px;font-weight:600}
+  input[type=text],select,input[type=color]{
+    width:100%;font:inherit;font-size:13px;color:var(--ink);
+    border:1px solid var(--line);border-radius:6px;background:var(--surface);
+    padding:7px 9px;outline:none;
+  }
+  input[type=color]{padding:2px;height:34px;cursor:pointer}
+  .modal label.field select{height:29px;padding-top:0;padding-bottom:0}
+  input[type=range]{width:100%;accent-color:var(--brand-ink);margin:6px 0 0}
+  label.field > span b{float:right;font-weight:600;color:var(--ink-2);font-variant-numeric:tabular-nums}
+  input[type=text]:focus,select:focus{border-color:var(--brand-ink);box-shadow:0 0 0 3px var(--focus-glow)}
+  button, .g-chip-face{
+    font:inherit;font-size:12.5px;font-weight:550;cursor:pointer;
+    border:1px solid var(--line);background:var(--surface);color:var(--ink-2);
+    border-radius:6px;padding:7px 11px;
+  }
+  button:hover, .g-chip-face:hover{background:var(--hover);border-color:var(--hover-line)}
+  button:active{transform:translateY(.5px)}
+  button:focus-visible{outline:2px solid var(--brand-ink);outline-offset:2px}
+  button:disabled{opacity:.38;cursor:default;pointer-events:none}
+  button[aria-disabled="true"]{opacity:.38;cursor:default}
+  button.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+  button.primary:hover{filter:brightness(1.08);background:var(--brand)}
+  button.ghost{border-color:transparent;background:transparent;color:var(--mute);padding:4px 6px}
+  button.ghost:hover{background:var(--line-2);color:var(--ink)}
+  button.danger:hover{color:var(--warn);background:var(--warn-tint)}
+  .btnrow{display:flex;gap:8px;flex-wrap:wrap}
+  .ic{width:17px;height:17px;fill:currentColor;flex:0 0 auto;display:block}
+  button, .g-chip-face{display:inline-flex;align-items:center;gap:6px}
+  #icons{display:none}

@@ -10,7 +10,7 @@ function here(){
   return $.NSFileManager.defaultManager.currentDirectoryPath.js + "/";
 }
 
-const HTML   = readFile(here() + "tierform_app.html");
+const HTML   = readFile(here() + "_test/source.html");
 const SCRIPT = /<script>([\s\S]*)<\/script>/.exec(HTML)[1];
 const STYLE  = /<style[^>]*>([\s\S]*?)<\/style>/.exec(HTML)[1];
 
@@ -288,7 +288,7 @@ const DECLS = ["HEX6","CONTRAST_MIN","SVGNS",
 
                "tourSaved", "tourStep", "TOUR", "tourCount", "tourCurrent"];
 
-const FNS   = ["updateDocLabel","syncNeverSavedBar","markDirty","resetPerRoster","confirmDiscard","newDoc",
+const FNS   = ["historyCheckpoint","restoreHistory","clearHistory","updateDocLabel","syncNeverSavedBar","markDirty","resetPerRoster","confirmDiscard","newDoc",
 
                "saveDoc","stateLimitProblem","encodedPhotoBytes","photoBudgetExceeded","openDoc","fileStem",
 

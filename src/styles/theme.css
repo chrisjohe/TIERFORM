@@ -1,0 +1,34 @@
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+  @media (prefers-color-scheme: dark){
+    :root{
+      --ink:#e2e5e9;
+      --ink-2:#c4cad2;
+      --mute:#97a0aa;
+      --line:#3a3f45;
+      --line-2:#31353a;
+      --surface:#24272b;
+      --shell:#1b1d20;
+      --warn:#eda2ae;
+      --warn-tint:#35191e;
+      --warn-line:#5c2c36;
+      --ava-grey:#4a5158;
+      --hover:#2c3035;
+      --hover-faint:#282b2f;
+      --hover-line:#4b525a;
+      --ava-grey-hover:#5a626b;
+      --drop-line:#4b525a;
+      --drop-bg:#26292d;
+      --dot:#33373d;
+      --inverse-bg:#e2e5e9;
+      --inverse-ink:#1b1d20;
+      --brand-ink:#7fb0d8;
+      --badge-bg:#a5aeb8;
+      --badge-ink:#16181b;
+      --seam:rgba(255,255,255,.45);
+      --brand-mark:#ffffff;
+      --hot:rgba(127,176,216,.10);
+      --hot-strong:rgba(127,176,216,.13);
+      --focus-glow:rgba(127,176,216,.30);
+      --tour-dim:rgba(0,0,0,.6);
+    }
+  }
