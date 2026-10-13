@@ -2,7 +2,7 @@ import { nameSegs, subline } from "../model/labels.js";
 import { docFont } from "../model/settings.js";
 
 function createTextMetrics(meas){
-function personLabelWidth(st, p){
+function personLabelWidth(st, p, lookup){
   const F = docFont(st);
   let w = 0;
   if(st.showPersonName !== false){
@@ -12,7 +12,7 @@ function personLabelWidth(st, p){
     }
   }
   meas.font = "400 11px " + F;
-  const sub = subline(st, p);
+  const sub = subline(st, p, lookup);
   return Math.max(w, sub ? meas.measureText(sub).width : 0);
 }
 

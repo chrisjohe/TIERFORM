@@ -1,10 +1,11 @@
+import { peopleBy } from "../model/indexes.js";
 import { documentState } from "../model/document.js";
 import { $, el, fill, icon } from "./dom.js";
 import { focusables, modalClose, modalOpen } from "./modal.js";
 
-function groupRow(g, i, total){
+function groupRow(g, i, total, members){
   const label = g.label || "";
-  const n = documentState.state.people.filter(p => p.groupId === g.id).length;
+  const n = (members || documentState.state.people.filter(p => p.groupId === g.id)).length;
   const first = i === 0, last = i === total - 1;
   return el("div", {cls:"grp-row", did:g.id}, [
     el("span", {cls:"grp-name", did:g.id, draggable:true, text:label}),
@@ -24,7 +25,8 @@ function syncGroupModal(){
   const groups = documentState.state.groups;
   $("#groupsLabel").value = documentState.state.groupsLabel || "";
   $("#groupEmpty").hidden = groups.length > 0;
-  fill($("#groupList"), groups.map((g,i)=>groupRow(g, i, groups.length)));
+  const byGroup = peopleBy(documentState.state.people, "groupId");
+  fill($("#groupList"), groups.map((g,i)=>groupRow(g, i, groups.length, byGroup.get(g.id) || [])));
 }
 
 function openGroupModal(){

@@ -1,3 +1,4 @@
+import { labelIndex } from "../model/indexes.js";
 import { groupLabel } from "../model/entities.js";
 
 function toCSV(st){
@@ -5,11 +6,12 @@ function toCSV(st){
     const s = String(v==null ? "" : v);
     return /[;"\r\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
   }
+  const lookup = labelIndex(st);
   const rows = [["Name","Grade","Group","Role"]];
   for(const p of st.people){
-    const t = st.tiers.find(t => t.id === p.tierId);
+    const t = lookup.tiers.get(p.tierId);
     const grade = t ? (t.code || t.label) : "";
-    rows.push([p.name, grade, groupLabel(st, p), p.role]);
+    rows.push([p.name, grade, groupLabel(st, p, lookup), p.role]);
   }
   return rows.map(r => r.map(csvField).join(";")).join("\r\n");
 }

@@ -27,8 +27,11 @@ prior editing context, and replaying steps starts from the same demo.
 
 ## Structure and geometry
 
-Grade order and person order are document data. Merging groups preserves
-roster order. A group with no members is removed after a mutation. Templates
+Grade order and person order are document data. Grid layouts preserve roster
+order across merged grades; band layouts concatenate people in grade order.
+A drag move must reproduce the entire roster order of repeated adjacent moves,
+including other grades interleaved between its members. A group with no members
+is removed after a mutation. Templates
 replace all of their style and structure properties in one undo step and
 cannot replace a structure that still has people.
 

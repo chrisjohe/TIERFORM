@@ -6,6 +6,7 @@ import { xmlAttr, xmlText } from "./xml.js";
 function toSVG(L){
   const accent  = paint(L.accent, "#003153");
   const ringCol = L.ring==="accent" ? accent : (L.ring==="white" ? "#ffffff" : null);
+  const font = xmlAttr(L.font);
   const PW = L.page.w.toFixed(2), PH = L.page.h.toFixed(2);
   let s = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
         + 'viewBox="0 0 '+PW+' '+PH+'" width="'+PW+'pt" height="'+PH+'pt">'
@@ -26,15 +27,16 @@ function toSVG(L){
     const src = validatePhoto(a.src);
     s += '<clipPath id="'+id+'"><circle cx="'+a.cx.toFixed(1)+'" cy="'+a.cy.toFixed(1)+'" r="'+a.r+'"/></clipPath>';
     if(src && a.img){
+      const photo = xmlAttr(src);
 
       s += '<circle cx="'+a.cx.toFixed(1)+'" cy="'+a.cy.toFixed(1)+'" r="'+a.r+'" fill="#ffffff"/>'
          + '<image clip-path="url(#'+id+')" x="'+a.img.x.toFixed(2)+'" y="'+a.img.y.toFixed(2)+'" '
          + 'width="'+a.img.w.toFixed(2)+'" height="'+a.img.h.toFixed(2)+'" preserveAspectRatio="none" '
-         + 'href="'+xmlAttr(src)+'" xlink:href="'+xmlAttr(src)+'"/>';
+         + 'href="'+photo+'" xlink:href="'+photo+'"/>';
     }else{
       s += '<circle cx="'+a.cx.toFixed(1)+'" cy="'+a.cy.toFixed(1)+'" r="'+a.r+'" fill="#c8ced5"/>'
          + '<text x="'+a.cx.toFixed(1)+'" y="'+(a.cy+7).toFixed(1)+'" text-anchor="middle" '
-         + 'font-family="'+xmlAttr(L.font)+'" font-size="19" font-weight="650" fill="#ffffff">'+xmlText(a.ini)+'</text>';
+         + 'font-family="'+font+'" font-size="19" font-weight="650" fill="#ffffff">'+xmlText(a.ini)+'</text>';
     }
     if(ringCol){
       s += '<circle cx="'+a.cx.toFixed(1)+'" cy="'+a.cy.toFixed(1)+'" r="'+(a.r-1)+'" fill="none" stroke="'+ringCol+'" stroke-width="2.5"/>';
@@ -47,7 +49,7 @@ function toSVG(L){
     if(!inner) continue;
     s += '<text x="'+t.x.toFixed(1)+'" y="'+t.y.toFixed(1)+'" text-anchor="'+oneOf(t.anchor, ANCHORS, "start")+'" '
        + (t.baseline==="middle" ? 'dominant-baseline="central" ' : '')
-       + 'font-family="'+xmlAttr(L.font)+'" font-size="'+(+t.size||12)+'" fill="'+paint(t.color, "#1A2129")+'"'
+       + 'font-family="'+font+'" font-size="'+(+t.size||12)+'" fill="'+paint(t.color, "#1A2129")+'"'
        + (t.tracking ? ' letter-spacing="'+(+t.tracking||0)+'"' : '') + '>' + inner + '</text>';
   }
   return s + '</g></svg>';

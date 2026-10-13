@@ -4,13 +4,17 @@ const ANCHORS = ["start","middle","end"];
 
 const HEX6 = /^#[0-9a-fA-F]{6}$/;
 
+function parsePhoto(src){
+  if(typeof src !== "string" || src.length > LIMITS.photoBytes) return null;
+  const url = src.trim();
+  const m = /^data:image\/(jpeg|png);base64,([A-Za-z0-9+/]+={0,2})$/.exec(url);
+  if(!m || m[2].length % 4 !== 0) return null;
+  return {url, mime:m[1], payload:m[2]};
+}
+
 function validatePhoto(src){
-  if(typeof src !== "string") return null;
-  const m = /^data:image\/(jpeg|png);base64,([A-Za-z0-9+/]+={0,2})$/.exec(src.trim());
-  if(!m) return null;
-  if(src.length > LIMITS.photoBytes) return null;
-  if(m[2].length % 4 !== 0) return null;
-  return src.trim();
+  const parsed = parsePhoto(src);
+  return parsed ? parsed.url : null;
 }
 
 function encodedPhotoBytes(st){
@@ -83,4 +87,4 @@ function hexFieldValue(raw){
   return validColour(s.charAt(0) === "#" ? s : "#" + s, null);
 }
 
-export { ANCHORS, HEX6, validatePhoto, encodedPhotoBytes, photoBudgetExceeded, stateLimitProblem, isPlainObject, clampText, oneOf, validColour, hexFieldValue };
+export { ANCHORS, HEX6, parsePhoto, validatePhoto, encodedPhotoBytes, photoBudgetExceeded, stateLimitProblem, isPlainObject, clampText, oneOf, validColour, hexFieldValue };

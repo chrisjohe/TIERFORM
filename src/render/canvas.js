@@ -57,15 +57,18 @@ async function toCanvas(L, dpi){
     const segs = t.segs.filter(g=>g.t);
     if(!segs.length) continue;
     x.fillStyle=paint(t.color, "#1A2129");
-    let total=0;
-    for(const g of segs){ x.font=g.w+" "+t.size+"px "+L.font; total += x.measureText(g.t).width; }
+    const widths = segs.map(g => {
+      x.font=g.w+" "+t.size+"px "+L.font;
+      return x.measureText(g.t).width;
+    });
+    const total = widths.reduce((sum, width) => sum + width, 0);
     let cx = t.anchor==="end" ? t.x-total : (t.anchor==="middle" ? t.x-total/2 : t.x);
     const cy = t.baseline==="middle" ? t.y + t.size*0.35 : t.y;
-    for(const g of segs){
+    segs.forEach((g, i) => {
       x.font=g.w+" "+t.size+"px "+L.font;
       x.fillText(g.t, cx, cy);
-      cx += x.measureText(g.t).width;
-    }
+      cx += widths[i];
+    });
   }
   return c;
 }

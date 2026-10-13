@@ -4,9 +4,9 @@ import os from 'node:os';
 import path from 'node:path';
 
 const cases=[
-['src/model/settings.js','"2026.10a"','"BROKEN"','release identity'],
+['src/model/settings.js','"2026.10b"','"BROKEN"','release identity'],
 ['src/engine/index.js','const text = createTextMetrics(meas);','meas = {font:"",measureText(){return {width:1};}};\nconst text = createTextMetrics(meas);','measurement belongs to each engine instance'],
-['src/model/labels.js','const t = st.tiers.find(t => t.id === p.tierId) || st.tiers[0];','const t = {label:"WRONG DOCUMENT"};','engine uses its argument rather than the editor document'],
+['src/model/labels.js','const t = (lookup ? lookup.tiers.get(p.tierId) : st.tiers.find(t => t.id === p.tierId)) || st.tiers[0];','const t = {label:"WRONG DOCUMENT"};','engine uses its argument rather than the editor document'],
 ['src/model/history.js','  mutate();\n  pruneGroups(documentState.state);\n  markDirty();','  mutate();\n  pruneGroups(documentState.state);','model mutations notify and undo without DOM dependencies'],
 ['src/model/history.js','if(!historyState.session || historyState.session.key !== key){','if(true){','a continuous edit remains one undo step and ends once'],
 ['src/model/history.js','  pruneGroups(documentState.state);','  void 0;','empty groups are pruned before notifications'],
@@ -17,7 +17,7 @@ const cases=[
 ['src/render/xml.js','.replace(/</g, "&lt;")','.replace(/</g, "<")','actual parser and renderer reject markup injection'],
 ['src/app/events/photos.js','import { $ } from "../../ui/dom.js";\n','','every application reference is imported or a standard browser global'],
 ['src/model/defaults.js','function defaults(){','typeof document;\nfunction defaults(){','domain and engine boundaries remain independent of UI and IO'],
-['_site/assets/app.js','(() => {','(() => {\nvoid 0;','offline script and styling match the hosted build','artifacts'],
+['_site/assets/app.js',null,null,'offline script and styling match the hosted build','artifacts'],
 ['_site/index.html','./assets/app.js','../assets/app.js','hosted resources resolve under a GitHub project path','artifacts'],
 ['_site/index.html',"connect-src 'none'","connect-src 'self'",'hosted CSP permits initial same-origin assets and blocks data connections','artifacts'],
 ['tierform_app.html','<meta charset="utf-8">','<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src *">','portable output has no external assets or hosted policy','artifacts'],

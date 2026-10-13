@@ -4,7 +4,7 @@ Build a team chart from a list of names and photos — as a **pyramid**, a
 **tornado**, a **histogram**, **swimlanes**, a **hive** or a **matrix** — and
 export it as a PNG, a PDF, an SVG or a CSV.
 
-**Version 2026.10a.** Use the hosted app, or download the self-contained HTML
+**Version 2026.10b.** Use the hosted app, or download the self-contained HTML
 file and open it offline. No install or account is needed.
 
 ![Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue) — see [LICENSE](LICENSE)

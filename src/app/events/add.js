@@ -2,12 +2,8 @@ import { addOnePerson, addPhotoIntoDialog } from "../add-person.js";
 import { clampFrame } from "../../model/framing.js";
 import { ADD_FRAME_KEY, addDialogState, closeAddModal, setAddPhoto, syncAddPhotoInitials, syncAddRolePlaceholder } from "../../ui/add-dialog.js";
 import { $ } from "../../ui/dom.js";
-import { PAN_STEP, PREVIEW_R, addFrameShim, syncAddFramePreview } from "../../ui/framing.js";
+import { PAN_STEP, bindFramePan, addFrameShim, syncAddFramePreview } from "../../ui/framing.js";
 import { selectTab } from "../../ui/ribbon.js";
-
-const addState = {
-  addPanS: null
-};
 
 function bindAddEvents(){
 $("#addPhoto").addEventListener("change", async e=>{
@@ -88,27 +84,11 @@ $("#addModal").addEventListener("keydown", e=>{
   syncAddFramePreview();
 });
 
-$("#addModal").addEventListener("pointerdown", e=>{
-  const el=e.target.closest('[data-fact="pan"]'); if(!el || !addDialogState.addPending) return;
-  e.preventDefault();
-  addState.addPanS={x:e.clientX, y:e.clientY, ox:+addDialogState.addPending.frame.ox||0, oy:+addDialogState.addPending.frame.oy||0, el};
-  el.classList.add("drag");
-  if(el.setPointerCapture) el.setPointerCapture(e.pointerId);
+bindFramePan($("#addModal"), {
+  subject(){ return addDialogState.addPending ? addFrameShim() : null; },
+  change(p, mutate){ mutate(); },
+  sync: syncAddFramePreview
 });
-
-$("#addModal").addEventListener("pointermove", e=>{
-  if(!addState.addPanS || !addDialogState.addPending) return;
-  addDialogState.addPending.frame.ox = addState.addPanS.ox + (e.clientX-addState.addPanS.x)/PREVIEW_R;
-  addDialogState.addPending.frame.oy = addState.addPanS.oy + (e.clientY-addState.addPanS.y)/PREVIEW_R;
-  clampFrame(addFrameShim());
-  syncAddFramePreview();
-});
-
-["pointerup","pointercancel"].forEach(ev=>$("#addModal").addEventListener(ev, ()=>{
-  if(!addState.addPanS) return;
-  addState.addPanS.el.classList.remove("drag");
-  addState.addPanS=null;
-}));
 }
 
-export { addState, bindAddEvents };
+export { bindAddEvents };

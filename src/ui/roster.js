@@ -1,3 +1,4 @@
+import { labelIndex, peopleBy } from "../model/indexes.js";
 import { codeParts } from "../engine/helpers.js";
 import { documentState } from "../model/document.js";
 import { groupLabel } from "../model/entities.js";
@@ -44,10 +45,10 @@ function restoreField(f){
 
 function rosterFiltered(){ return rosterState.rosterQuery.trim().length > 0; }
 
-function personMatches(st, p, q){
-  const t = (st.tiers || []).find(x => x.id === p.tierId);
+function personMatches(st, p, q, lookup){
+  const t = lookup ? lookup.tiers.get(p.tierId) : (st.tiers || []).find(x => x.id === p.tierId);
   const hay = [p.name || "", p.role || tierRole(t), t ? t.code : "", t ? t.label : "",
-               groupLabel(st, p)].join("\n").toLowerCase();
+               groupLabel(st, p, lookup)].join("\n").toLowerCase();
   return hay.indexOf(q.toLowerCase()) >= 0;
 }
 
@@ -78,10 +79,11 @@ function renderRoster(){
     countEl.hidden = true;
   }else{
     const groups = [];
+    const byTier = peopleBy(documentState.state.people, "tierId"), lookup = labelIndex(documentState.state);
     let shown = 0;
     for(const t of documentState.state.tiers){
-      const list = documentState.state.people.filter(p => p.tierId === t.id
-        && (!q || personMatches(documentState.state, p, q)));
+      const members = byTier.get(t.id) || [];
+      const list = q ? members.filter(p => personMatches(documentState.state, p, q, lookup)) : members;
       if(!list.length) continue;
       shown += list.length;
       const head = el("div", {cls:"th"});

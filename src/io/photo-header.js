@@ -1,4 +1,4 @@
-import { validatePhoto } from "../model/validation.js";
+import { parsePhoto } from "../model/validation.js";
 
 const DECODE_TIMEOUT = 15000;
 
@@ -13,12 +13,9 @@ const B64_VALUES = (function(){
 })();
 
 function photoBytes(src){
-  const url = validatePhoto(src);
-  if(!url) return null;
-  const m = /^data:image\/(jpeg|png);base64,([A-Za-z0-9+/]+={0,2})$/.exec(url);
-  if(!m) return null;
-  const payload = m[2];
-  if(payload.length % 4 !== 0) return null;
+  const parsed = parsePhoto(src);
+  if(!parsed) return null;
+  const {mime, payload} = parsed;
 
   const want = Math.min(PHOTO_SCAN_BYTES, (payload.length / 4) * 3);
   const bytes = new Uint8Array(want);
@@ -35,7 +32,7 @@ function photoBytes(src){
       bytes[at++] = (acc >> bits) & 255;
     }
   }
-  return {mime: m[1], bytes: at === bytes.length ? bytes : bytes.subarray(0, at)};
+  return {mime, bytes: at === bytes.length ? bytes : bytes.subarray(0, at)};
 }
 
 function be32(b, at){

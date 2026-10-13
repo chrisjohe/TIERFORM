@@ -1,4 +1,6 @@
 import { ANGLES, DENSITY, G, PAGES } from "./constants.js";
+import { emitHeaderTexts, pageFit, rect } from "./shared.js";
+import { labelIndex, peopleBy } from "../model/indexes.js";
 import { angleIndex } from "./helpers.js";
 import { frameRect } from "../model/framing.js";
 import { initials, nameSegs, subline } from "../model/labels.js";
@@ -8,10 +10,11 @@ import { withAlpha } from "../render/colour.js";
 function createBandLayouts(meas, {personLabelWidth, headNeedWidth, gradeHeadingTexts, fitName, ellipsize}){
 function buildBandGroups(st){
   const tiers = st.tiers;
+  const lookup = labelIndex(st), byTier = peopleBy(st.people, "tierId");
 
   const groups = [];
   tiers.forEach(t=>{
-    const ppl = st.people.filter(p=>p.tierId===t.id);
+    const ppl = (byTier.get(t.id) || []);
     if(t.merge && groups.length){
       const g = groups[groups.length-1];
       g.tiers.push(t);
@@ -28,7 +31,7 @@ function buildBandGroups(st){
 
   let need = (personTextOn && !below) ? 232 : 2*G.avaR + 20;
   for(const g of groups) for(const p of g.people){
-    const labelNeed = personLabelWidth(st, p);
+    const labelNeed = personLabelWidth(st, p, lookup);
 
     need = Math.max(need, below
       ? Math.max(2*G.avaR, labelNeed) + G.belowPadX
@@ -57,7 +60,7 @@ function buildBandGroups(st){
 
   const contentW = groups.map(g => leftInset + g.people.length*personW + G.padRight);
 
-  return {groups, below, personNameOn, personSublineOn, personTextOn,
+  return {groups, lookup, below, personNameOn, personSublineOn, personTextOn,
           personW, headNeed, labelW, leftInset, contentW};
 }
 
@@ -87,18 +90,8 @@ function buildBandStack(st, ctx){
   return {ys, natH, gap, labelDrop};
 }
 
-function emitHeaderTexts(st, hL, hR){
-  const texts = [{x:hL+30, y:G.bandH/2, anchor:"start", baseline:"middle",
-              segs:[{t:st.title||"", w:600}], size:25, color:st.inkOnColour}];
-  if(st.brand && st.brand.trim()){
-    texts.push({x:hR-24, y:G.bandH/2, anchor:"end", baseline:"middle",
-                segs:[{t:st.brand.trim(), w:700}], size:26, color:st.inkOnColour});
-  }
-  return texts;
-}
-
 function emitBandPeople(st, ctx, i, y0, L0, R0, prevGroupX0){
-  const {groups, labelW, leftInset, personW, below, personNameOn, personSublineOn, personTextOn} = ctx;
+  const {groups, lookup, labelW, leftInset, personW, below, personNameOn, personSublineOn, personTextOn} = ctx;
   const g = groups[i];
   const cy = y0 + G.bandH/2;
   const white = g.t.fill === "white";
@@ -131,7 +124,7 @@ function emitBandPeople(st, ctx, i, y0, L0, R0, prevGroupX0){
     const dmin = Math.min(phi, personW - phi);
     const CLEAR = below
       ? Math.min(personW/2, Math.ceil(
-          groups[i-1].people.reduce((m,p)=>Math.max(m, personLabelWidth(st,p)), 0)/2
+          groups[i-1].people.reduce((m,p)=>Math.max(m, personLabelWidth(st,p,lookup)), 0)/2
           + G.avaR))
       : Math.ceil(Math.sqrt((2*G.avaR)**2 - G.bandH**2));
     if(dmin < CLEAR){
@@ -154,7 +147,7 @@ function emitBandPeople(st, ctx, i, y0, L0, R0, prevGroupX0){
     const acx = x0Final + j*personW + ((personTextOn && !below) ? G.avaR + 4 : personW/2);
     avatars.push({cx:acx, cy, r:G.avaR, src:p.photo||null, ini:initials(p.name),
                   img: p.photo ? frameRect(acx, cy, G.avaR, p.pw, p.ph, p.frame) : null});
-    const sub = subline(st, p), subOn = !!sub;
+    const sub = subline(st, p, lookup), subOn = !!sub;
 
     const tx2 = below ? acx : acx + G.avaR + G.gapAva;
     const anchor = below ? "middle" : "start";
@@ -184,7 +177,6 @@ function computeTriangleLayout(st, dir){
   const {groups, contentW} = ctx;
   const k = ANGLES[angleIndex(st.angle)];
 
-  const availW = page.w - 2*G.margin, availH = page.h - 2*G.margin;
   const {ys, natH} = buildBandStack(st, ctx);
 
   let aHalf = ctx.headNeed/2;
@@ -195,9 +187,7 @@ function computeTriangleLayout(st, dir){
 
   const b = {ys, natH, a:aHalf, natW: 2*(aHalf + Math.max(0, dir*k*natH))};
 
-  const s  = Math.min(availW/b.natW, availH/b.natH);
-  const tx = G.margin + (availW - b.natW*s)/2;
-  const ty = G.margin + (availH - b.natH*s)/2;
+  const fit = pageFit(page, b.natW, b.natH);
 
   const cx    = b.natW/2;
   const halfW = y => b.a + dir*k*y;
@@ -226,7 +216,7 @@ function computeTriangleLayout(st, dir){
     prevGroupX0 = res.x0Final;
   });
 
-  return {page, fit:{tx,ty,s}, bands, texts, avatars,
+  return {page, fit, bands, texts, avatars,
           accent:st.accent, ring:st.ring, bg:st.bg, font:F, empty:!groups.length, natW:b.natW, natH:b.natH, angle:k};
 }
 
@@ -240,16 +230,12 @@ function computeHistogramLayout(st){
   const ctx = buildBandGroups(st);
   const {groups, contentW} = ctx;
 
-  const availW = page.w - 2*G.margin, availH = page.h - 2*G.margin;
   const {ys, natH} = buildBandStack(st, ctx);
 
   const natW = Math.max(ctx.headNeed, ...contentW);
 
-  const s  = Math.min(availW/natW, availH/natH);
-  const tx = G.margin + (availW - natW*s)/2;
-  const ty = G.margin + (availH - natH*s)/2;
+  const fit = pageFit(page, natW, natH);
 
-  const rect = (x,y,w,h) => [[x,y],[x+w,y],[x+w,y+h],[x,y+h]];
 
   const bands=[], avatars=[], texts=[];
 
@@ -269,7 +255,7 @@ function computeHistogramLayout(st){
     prevGroupX0 = res.x0Final;
   });
 
-  return {page, fit:{tx,ty,s}, bands, texts, avatars,
+  return {page, fit, bands, texts, avatars,
           accent:st.accent, ring:st.ring, bg:st.bg, font:F, empty:!groups.length,
           natW, natH, angle:0};
 }

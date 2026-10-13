@@ -177,3 +177,95 @@ test('tour cancellation restores the document, dirty status and undo history',as
   await expect(page.locator('#tourCard')).toBeHidden();
   expect(await chart(page)).toBe(before);
 });
+
+async function savedDocument(page){
+  const pending=page.waitForEvent('download');
+  await page.locator('#qat [data-cmd="save"]').click();
+  const file=await pending,destination=test.info().outputPath('settings-roster.json');
+  await file.saveAs(destination);
+  return JSON.parse(fs.readFileSync(destination,'utf8'));
+}
+
+test('shared design bindings retain every field and undo independently',async({page})=>{
+  await openRoster(page);
+  const choices={nameBold:'family',font:'arial',bg:'transparent',ring:'white',page:'portrait',density:'tight',nameLabelPosition:'next'};
+  for(const [id,value] of Object.entries(choices)) await page.locator('#'+id).selectOption(value,{force:true});
+  await page.locator('#tab-design').click();
+  const colours={inkOnColour:'#eeeeee',inkOnWhite:'#222222'};
+  await page.locator('#textBtn').click();
+  for(const [id,value] of Object.entries(colours)) await page.locator('#'+id).evaluate((el,value)=>{
+    el.focus();el.value=value;el.dispatchEvent(new Event('input',{bubbles:true}));el.blur();
+  },value);
+  await page.keyboard.press('Escape');
+  await page.locator('#labelsBtn').click();
+  await page.locator('#showGradeCode').uncheck();
+  await page.locator('#showGradeName').check();
+  await page.keyboard.press('Escape');
+  await page.locator('#nameLabelsBtn').click();
+  for(const id of ['showPersonName','showPersonGrade','showPersonGroup']) await page.locator('#'+id).uncheck();
+  await page.keyboard.press('Escape');
+  await page.locator('#headerBtn').click();
+  await page.locator('#brand').fill('Brand changed');
+  await page.locator('#brand').press('Enter');
+  await page.keyboard.press('Escape');
+  await page.locator('#tab-grades').click();
+  await page.locator('[data-cmd="groups"]').click();
+  await page.locator('#groupsLabel').fill('Axis changed');
+  await page.locator('#groupDoneBtn').click();
+  const saved=await savedDocument(page);
+  for(const [key,value] of Object.entries({...choices,...colours,showGradeCode:false,showGradeName:true,showPersonName:false,showPersonGrade:false,showPersonGroup:false,brand:'Brand changed',groupsLabel:'Axis changed'})) expect(saved[key],key).toEqual(value);
+  await page.locator('#undoBtn').click();
+  const undone=await savedDocument(page);
+  expect(undone.groupsLabel).not.toBe('Axis changed');
+  expect(undone.brand).toBe('Brand changed');
+  await page.locator('#redoBtn').click();
+  expect((await savedDocument(page)).groupsLabel).toBe('Axis changed');
+});
+
+async function panPhoto(page,modal){
+  const slider=page.locator(modal+' input[data-fact="zoom"]');
+  await slider.focus();
+  await slider.evaluate(el=>{el.value='1.5';el.dispatchEvent(new Event('input',{bubbles:true}));el.blur();});
+  const circle=page.locator(modal+' [data-fact="pan"]');
+  const before=await circle.locator('img').getAttribute('style');
+  const box=await circle.boundingBox();
+  await page.mouse.move(box.x+box.width/2,box.y+box.height/2);
+  await page.mouse.down();
+  await page.mouse.move(box.x+box.width/2+24,box.y+box.height/2+16,{steps:4});
+  await page.mouse.up();
+  expect(await circle.locator('img').getAttribute('style')).not.toBe(before);
+  await expect(circle).not.toHaveClass(/drag/);
+}
+
+test('shared photo panning preserves edit history and pending add isolation',async({page})=>{
+  await openRoster(page);
+  await page.locator('.p-row:has(img) [data-act="menu"]').first().click();
+  await page.locator('#personMenu [data-act="edit"]').click();
+  await panPhoto(page,'#editModal');
+  const panned=await chart(page);
+  await page.locator('#editDoneBtn').click();
+  await page.locator('#undoBtn').click();
+  expect(await chart(page)).not.toBe(panned);
+  await page.locator('#redoBtn').click();
+  expect(await chart(page)).toBe(panned);
+
+  const initial=await savedDocument(page),before=await chart(page);
+  const photo=initial.people.find(p=>p.photo).photo;
+  const destination=test.info().outputPath(photo.startsWith('data:image/png;')?'add-photo.png':'add-photo.jpg');
+  fs.writeFileSync(destination,Buffer.from(photo.split(',')[1],'base64'));
+  await page.locator('#pane-file [data-cmd="addPeople"]').first().click();
+  await page.locator('#addPhoto').setInputFiles(destination);
+  await expect(page.locator('#addPhotoWell')).toBeVisible();
+  await page.locator('#addName').fill('Framed addition');
+  await panPhoto(page,'#addModal');
+  expect(await chart(page)).toBe(before);
+  await page.locator('#addAddCloseBtn').click();
+  const added=await savedDocument(page),person=added.people.at(-1);
+  expect(added.people.length).toBe(initial.people.length+1);
+  expect(person.name).toBe('Framed addition');
+  expect(person.frame.zoom).toBe(1.5);
+  expect(person.frame.ox).toBeGreaterThan(0);
+  expect(person.frame.oy).toBeGreaterThan(0);
+  await page.locator('#undoBtn').click();
+  expect(await chart(page)).toBe(before);
+});

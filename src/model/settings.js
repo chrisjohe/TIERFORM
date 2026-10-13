@@ -1,6 +1,6 @@
 
 
-const VERSION = "2026.10a";
+const VERSION = "2026.10b";
 
 const FONT = "'Open Sans','Segoe UI',system-ui,Roboto,Helvetica,Arial,sans-serif";
 

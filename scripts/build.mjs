@@ -6,7 +6,8 @@ import {build} from 'esbuild';
 const root=path.resolve(import.meta.dirname,'..');
 process.chdir(root);
 const CSP="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src data:; font-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'";
-const result=await build({entryPoints:['src/main.js'],bundle:true,write:false,format:'iife',target:'es2022',legalComments:'none',minify:false,charset:'utf8'});
+// Keep escaped newlines: PDF cross-reference strings have significant line-end spaces.
+const result=await build({entryPoints:['src/main.js'],bundle:true,write:false,format:'iife',target:'es2022',legalComments:'none',minify:true,supported:{'template-literal':false},charset:'utf8'});
 const js=result.outputFiles[0].text;
 const styles=['base','ribbon','info-tour','controls','roster','workspace','dialogs','theme'];
 const css=(await Promise.all(styles.map(name=>fs.readFile('src/styles/'+name+'.css','utf8')))).join('');

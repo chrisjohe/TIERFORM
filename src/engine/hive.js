@@ -1,31 +1,19 @@
 import { DENSITY, G, HV, PAGES } from "./constants.js";
-import { frameRect } from "../model/framing.js";
-import { initials, nameSegs, subline } from "../model/labels.js";
+import { createGridHelpers, emitAvatar, emitHeaderTexts, gridGroups, pageFit, rect } from "./shared.js";
+import { labelIndex } from "../model/indexes.js";
+import { subline } from "../model/labels.js";
 import { docFont } from "../model/settings.js";
 import { withAlpha } from "../render/colour.js";
 
-function createHiveLayout(meas, {personLabelWidth, headNeedWidth, gradeHeadingTexts, fitName, ellipsize}){
+function createHiveLayout(meas, text){
+const {personLabelWidth, headNeedWidth, gradeHeadingTexts} = text;
+const {emitGridLabels} = createGridHelpers(meas, text);
 function computeHiveLayout(st){
   const F = docFont(st);
   const page = PAGES[st.page] || PAGES["landscape"];
   const dens = DENSITY[st.density] || DENSITY.balanced;
 
-  const grouped = [];
-  st.tiers.forEach((t, index) => {
-    if(t.merge && grouped.length){
-      const group = grouped[grouped.length - 1];
-      group.tiers.push(t);
-      group.lastIndex = index;
-    }else{
-      grouped.push({t, tiers:[t], index, lastIndex:index, people:[]});
-    }
-  });
-  grouped.forEach(group => {
-    const ids = new Set(group.tiers.map(t => t.id));
-    group.people = st.people.filter(p => ids.has(p.tierId));
-  });
-  const anyone = grouped.some(g => g.people.length);
-  const groups = anyone ? grouped.filter(g => g.people.length) : grouped;
+  const groups = gridGroups(st), lookup = labelIndex(st);
   const N = groups.length;
 
   const namesNext       = st.nameLabelPosition === "next";
@@ -39,7 +27,7 @@ function computeHiveLayout(st){
   if(personTextOn){
     for(const group of groups){
       for(const p of group.people){
-        labelW = Math.max(labelW, personLabelWidth(st, p));
+        labelW = Math.max(labelW, personLabelWidth(st, p, lookup));
       }
     }
     labelW = Math.min(labelW, HV.labelMax);
@@ -130,12 +118,7 @@ function computeHiveLayout(st){
 
   const natH = laneTop + (rows > 0 ? (rows - 1)*dy + 2*R : 0);
 
-  const availW = page.w - 2*G.margin, availH = page.h - 2*G.margin;
-  const s  = Math.min(availW/natW, availH/natH);
-  const tx = G.margin + (availW - natW*s)/2;
-  const ty = G.margin + (availH - natH*s)/2;
-
-  const rect = (x, y, w, h) => [[x,y],[x+w,y],[x+w,y+h],[x,y+h]];
+  const fit = pageFit(page, natW, natH);
   const hexPts = (cx, cy) => {
     const pts = [];
     for(let i = 0; i < 6; i++){
@@ -147,12 +130,7 @@ function computeHiveLayout(st){
   const bands = [], avatars = [], texts = [];
 
   bands.push({pts:rect(0, 0, natW, G.bandH), fill:"green"});
-  texts.push({x:30, y:G.bandH/2, anchor:"start", baseline:"middle",
-              segs:[{t:st.title || "", w:600}], size:25, color:st.inkOnColour});
-  if(st.brand && st.brand.trim()){
-    texts.push({x:natW - 24, y:G.bandH/2, anchor:"end", baseline:"middle",
-                segs:[{t:st.brand.trim(), w:700}], size:26, color:st.inkOnColour});
-  }
+  texts.push(...emitHeaderTexts(st, 0, natW));
 
   groups.forEach((g, i) => {
     const hcx = relX[i] + shift, hcy = relY[i];
@@ -183,45 +161,21 @@ function computeHiveLayout(st){
         const p = g.people[idx++];
         const ccx = rowLeft + c*(cellW + cellGapX) + cellW/2;
 
-        if(namesNext){
-          const acx = ccx - cellW/2 + G.avaR, acy = ccy;
-          avatars.push({cx:acx, cy:acy, r:G.avaR, src:p.photo || null, ini:initials(p.name),
-                        img: p.photo ? frameRect(acx, acy, G.avaR, p.pw, p.ph, p.frame) : null});
-          const tx2 = acx + G.avaR + G.gapAva;
-          const textW = labelW;
-          const sub = subline(st, p), subOn = !!sub;
-          if(personNameOn){
-            texts.push({x:tx2, y:subOn ? acy-3 : acy+5, anchor:"start", baseline:"alphabetic",
-                        segs:fitName(nameSegs(st, p.name), textW, F), size:15, color:ink});
-          }
-          if(subOn){
-            texts.push({x:tx2, y:personNameOn ? acy+14 : acy+4, anchor:"start", baseline:"alphabetic",
-                        segs:[{t:ellipsize(sub, textW, "400 11px " + F), w:400}],
-                        size:11, color:pMute, tracking:.2});
-          }
-        }else{
-          const acx = ccx, acy = ccy - cellH/2 + G.avaR;
-          avatars.push({cx:acx, cy:acy, r:G.avaR, src:p.photo || null, ini:initials(p.name),
-                        img: p.photo ? frameRect(acx, acy, G.avaR, p.pw, p.ph, p.frame) : null});
-          const avaBottom = acy + G.avaR;
-          const textW = cellW;
-          const sub = subline(st, p), subOn = !!sub;
-          if(personNameOn){
-            texts.push({x:ccx, y:avaBottom + HV.nameDy, anchor:"middle", baseline:"alphabetic",
-                        segs:fitName(nameSegs(st, p.name), textW, F), size:15, color:ink});
-          }
-          if(subOn){
-            texts.push({x:ccx, y:avaBottom + (personNameOn ? HV.subDy : HV.nameDy),
-                        anchor:"middle", baseline:"alphabetic",
-                        segs:[{t:ellipsize(sub, textW, "400 11px " + F), w:400}],
-                        size:11, color:pMute, tracking:.2});
-          }
-        }
+        const acx = namesNext ? ccx - cellW/2 + G.avaR : ccx;
+        const acy = namesNext ? ccy : ccy - cellH/2 + G.avaR;
+        avatars.push(emitAvatar(p, acx, acy));
+        const sub = subline(st, p, lookup), avaBottom = acy + G.avaR;
+        texts.push(...emitGridLabels(st, p, F,
+          namesNext ? acx + G.avaR + G.gapAva : ccx,
+          namesNext ? (sub ? acy-3 : acy+5) : avaBottom + HV.nameDy,
+          namesNext ? (personNameOn ? acy+14 : acy+4) : avaBottom + (personNameOn ? HV.subDy : HV.nameDy),
+          namesNext ? "start" : "middle", namesNext ? labelW : cellW,
+          ink, pMute, sub));
       }
     }
   });
 
-  return {page, fit:{tx,ty,s}, bands, texts, avatars,
+  return {page, fit, bands, texts, avatars,
           accent:st.accent, ring:st.ring, bg:st.bg, font:F, empty:!groups.length,
           natW:natW, natH:natH, angle:0};
 }

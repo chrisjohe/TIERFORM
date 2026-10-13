@@ -1,14 +1,11 @@
 import { DECODE_TIMEOUT, photoHeader } from "./photo-header.js";
 import { LIMITS } from "../model/settings.js";
-import { validatePhoto } from "../model/validation.js";
 
 const DECODE_CANCELLED = {cancelled:true};
 
 async function decodeImage(src, cancelled){
   const stop = cancelled || (() => false);
   if(stop()) return DECODE_CANCELLED;
-
-  if(!validatePhoto(src)) return null;
 
   const head = photoHeader(src);
   if(!head) return null;

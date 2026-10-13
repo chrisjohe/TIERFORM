@@ -1,3 +1,4 @@
+import { planPersonOrder } from "../model/person-order.js";
 import { documentState } from "../model/document.js";
 import { commit } from "../model/history.js";
 import { gradeName } from "../model/labels.js";
@@ -80,39 +81,16 @@ function reorderPerson(sourceId, targetId, after){
 
   const label = moveLabelTo(sourceId, dest);
 
-  let fuel = documentState.state.people.length + documentState.state.tiers.length + 2;
-  const restore = {order: documentState.state.people.slice(), tierId: p.tierId};
-  let stalled = false;
-
+  let moved = false;
   commit(label, ()=>{
-
-    while(p.tierId !== dest.id){
-      const from = documentState.state.tiers.findIndex(x => x.id === p.tierId);
-      const to   = documentState.state.tiers.findIndex(x => x.id === dest.id);
-      if(from < 0 || to < 0){ stalled = true; break; }
-      if(!walkOnce(p, to > from ? 1 : -1) || --fuel < 0){ stalled = true; break; }
-    }
-
-    while(!stalled){
-      const {mates, want} = personSlot(p, t, after);
-      const at = mates.indexOf(p);
-      if(at < 0 || at === want) break;
-      if(!walkOnce(p, want > at ? 1 : -1) || --fuel < 0){ stalled = true; break; }
-    }
-
-    if(stalled){
-      documentState.state.people = restore.order;
-      p.tierId = restore.tierId;
-    }
+    const order = planPersonOrder(documentState.state.people, documentState.state.tiers, p, t, after);
+    if(!order) return;
+    order.forEach((person, i) => { documentState.state.people[i] = person; });
+    p.tierId = dest.id;
+    moved = true;
   });
-  if(stalled) alertMsg("That move could not be completed — the roster is unchanged");
-  return !stalled;
-}
-
-function walkOnce(p, dir){
-  const wasAt = documentState.state.people.indexOf(p), wasIn = p.tierId;
-  movePerson(p.id, dir);
-  return documentState.state.people.indexOf(p) !== wasAt || p.tierId !== wasIn;
+  if(!moved) alertMsg("That move could not be completed — the roster is unchanged");
+  return moved;
 }
 
 function removePerson(id){
@@ -123,4 +101,4 @@ function removePerson(id){
   toast((first || "Person")+" removed");
 }
 
-export { moveTarget, moveLabelTo, moveLabel, movePerson, personSlot, personDropIsNoop, reorderPerson, walkOnce, removePerson };
+export { moveTarget, moveLabelTo, moveLabel, movePerson, personSlot, personDropIsNoop, reorderPerson, removePerson };

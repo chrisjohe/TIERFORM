@@ -1,12 +1,12 @@
 # TIERFORM architecture
 
-Version 2026.10a uses native ES modules as its editable source. The build
+Version 2026.10b uses native ES modules as its editable source. The build
 bundles them for hosting and for a portable HTML download. Neither output
 needs a runtime package, application server or account.
 
 | Source | Responsibility |
 | --- | --- |
-| `src/model/` | Document defaults and entities, limits, history, photo references, labels and framing |
+| `src/model/` | Document defaults and entities, limits, history, photo references, labels, framing, lookup indexes and person ordering |
 | `src/engine/` | Text measurement, shared band solver and six layout geometries |
 | `src/render/` | Layout to SVG, Canvas and PDF, colour and XML encoding |
 | `src/io/` | Roster validation, bounded image preflight and decoding, CSV and downloads |
@@ -28,6 +28,12 @@ band stack and content emission. Swimlanes, Hive and Matrix have separate
 solvers. Text measurement helpers belong to each engine instance. Renderers
 consume the layout result, so preview and export use the same geometry.
 
+`engine/shared.js` holds page fitting, headers, avatars and grid-label emission.
+Swimlanes and Matrix also share lane measurement and person placement. Grid
+grouping preserves roster order across merged grades; band grouping retains
+its distinct grade-first order. Matrix fills indexed row cells in one pass
+per lane instead of filtering every lane again for every group.
+
 ## Model and controllers
 
 `model/document.js` owns the current document, filename, dirty flag and
@@ -47,9 +53,18 @@ components compose each other through named imports, with some cycles among
 roster, dialogs and popovers. Those connections resolve through function
 calls; they do not form a common mutable context or runtime module registry.
 
+Entity and membership indexes in `model/indexes.js` live for one calculation,
+render or export. They are rebuilt on the next call, avoiding stale data after
+edits, undo or document replacement. `model/person-order.js` plans a drag move
+without mutating its input. It rotates occupied slots per crossed grade,
+preserving the complete interleaved roster order of repeated keyboard moves.
+The controller applies that plan in one history entry. Photo-pan listeners are
+shared, while edit history and pending-add state retain separate callbacks.
+
 ## Outputs
 
-`npm run build` uses pinned esbuild to bundle `src/main.js`. It assembles the
+`npm run build` uses pinned esbuild to bundle and minify `src/main.js`. Editable
+modules retain their names and formatting. It assembles the
 same ordered markup and styles into two outputs:
 
 - `_site/index.html` loads `./assets/app.js`, CSS and the bundled font. Relative

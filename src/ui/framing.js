@@ -1,10 +1,40 @@
-import { ZOOM_MAX, frameRect } from "../model/framing.js";
+import { ZOOM_MAX, clampFrame, frameRect } from "../model/framing.js";
 import { validatePhoto } from "../model/validation.js";
 import { ADD_FRAME_KEY, addDialogState } from "./add-dialog.js";
 import { $, el, icon } from "./dom.js";
 import { firstName } from "./person-row.js";
 
 const PREVIEW_R = 80;
+
+function bindFramePan(root, {subject, change, sync, end}){
+  let pan = null;
+  root.addEventListener("pointerdown", e=>{
+    const el = e.target.closest('[data-fact="pan"]');
+    const p = el && subject(el.dataset.id);
+    if(!p) return;
+    if(!p.frame) p.frame = {zoom:1, ox:0, oy:0};
+    e.preventDefault();
+    pan = {id:el.dataset.id, x:e.clientX, y:e.clientY, ox:+p.frame.ox||0, oy:+p.frame.oy||0, el};
+    el.classList.add("drag");
+    if(el.setPointerCapture) el.setPointerCapture(e.pointerId);
+  });
+  root.addEventListener("pointermove", e=>{
+    const p = pan && subject(pan.id);
+    if(!p || !p.frame) return;
+    change(p, ()=>{
+      p.frame.ox = pan.ox + (e.clientX-pan.x)/PREVIEW_R;
+      p.frame.oy = pan.oy + (e.clientY-pan.y)/PREVIEW_R;
+      clampFrame(p);
+    });
+    sync(p);
+  });
+  for(const event of ["pointerup", "pointercancel"]) root.addEventListener(event, ()=>{
+    if(!pan) return;
+    pan.el.classList.remove("drag");
+    pan = null;
+    if(end) end();
+  });
+}
 
 function framePanel(subj){
   const f = subj.frame || {zoom:1, ox:0, oy:0};
@@ -94,4 +124,4 @@ function framingLabel(p){
 
 const PAN_STEP = 0.05;
 
-export { PREVIEW_R, framePanel, placeFramePreview, syncFramePreview, syncAddFramePreview, addFrameShim, framingLabel, PAN_STEP };
+export { PREVIEW_R, bindFramePan, framePanel, placeFramePreview, syncFramePreview, syncAddFramePreview, addFrameShim, framingLabel, PAN_STEP };

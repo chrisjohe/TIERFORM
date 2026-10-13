@@ -1,3 +1,4 @@
+import { peopleBy } from "../model/indexes.js";
 import { G } from "../engine/constants.js";
 import { documentState } from "../model/document.js";
 import { LAYOUTS } from "../model/settings.js";
@@ -25,9 +26,10 @@ function checkLegibility(L){
 
   const cap = LAYOUTS[documentState.state.layout] || LAYOUTS.pyramid;
   const swim = cap.grows === "across";
-  const deepest = Math.max(0, ...documentState.state.tiers.map(t =>
-    documentState.state.people.filter(p => p.tierId === t.id).length));
-  const laneCount = documentState.state.tiers.filter(t => documentState.state.people.some(p => p.tierId === t.id)).length;
+  const byTier = peopleBy(documentState.state.people, "tierId");
+  const counts = documentState.state.tiers.map(t => (byTier.get(t.id) || []).length);
+  const deepest = Math.max(0, ...counts);
+  const laneCount = counts.filter(Boolean).length;
   const fixes = [];
 
   const portrait  = L.page.h > L.page.w;

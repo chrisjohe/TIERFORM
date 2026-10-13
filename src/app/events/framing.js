@@ -4,12 +4,8 @@ import { clampFrame } from "../../model/framing.js";
 import { commit, edit, endEdit } from "../../model/history.js";
 import { applyPhoto } from "../../model/photos.js";
 import { $ } from "../../ui/dom.js";
-import { PAN_STEP, PREVIEW_R, framingLabel, syncFramePreview } from "../../ui/framing.js";
+import { PAN_STEP, bindFramePan, framingLabel, syncFramePreview } from "../../ui/framing.js";
 import { firstName } from "../../ui/person-row.js";
-
-const framingState = {
-  panS: null
-};
 
 function bindFramingEvents(){
 $("#editModal").addEventListener("click", e=>{
@@ -63,34 +59,15 @@ $("#editModal").addEventListener("keydown", e=>{
   syncFramePreview(p);
 });
 
-$("#editModal").addEventListener("pointerdown", e=>{
-  const el=e.target.closest('[data-fact="pan"]'); if(!el) return;
-  const p=documentState.state.people.find(x=>x.id===el.dataset.id); if(!p||!p.photo) return;
-  if(!p.frame) p.frame={zoom:1, ox:0, oy:0};
-  e.preventDefault();
-  framingState.panS={id:p.id, x:e.clientX, y:e.clientY, ox:+p.frame.ox||0, oy:+p.frame.oy||0, el};
-  el.classList.add("drag");
-  if(el.setPointerCapture) el.setPointerCapture(e.pointerId);
+bindFramePan($("#editModal"), {
+  subject(id){
+    const p = documentState.state.people.find(x => x.id === id);
+    return p && p.photo ? p : null;
+  },
+  change(p, mutate){ edit("frame:"+p.id, framingLabel(p), mutate); },
+  sync: syncFramePreview,
+  end: endEdit
 });
-
-$("#editModal").addEventListener("pointermove", e=>{
-  if(!framingState.panS) return;
-  const p=documentState.state.people.find(x=>x.id===framingState.panS.id); if(!p||!p.frame) return;
-  edit("frame:"+p.id, framingLabel(p), ()=>{
-
-    p.frame.ox = framingState.panS.ox + (e.clientX-framingState.panS.x)/PREVIEW_R;
-    p.frame.oy = framingState.panS.oy + (e.clientY-framingState.panS.y)/PREVIEW_R;
-    clampFrame(p);
-  });
-  syncFramePreview(p);
-});
-
-["pointerup","pointercancel"].forEach(ev=>$("#editModal").addEventListener(ev, ()=>{
-  if(!framingState.panS) return;
-  framingState.panS.el.classList.remove("drag");
-  framingState.panS=null;
-  endEdit();
-}));
 }
 
-export { framingState, bindFramingEvents };
+export { bindFramingEvents };

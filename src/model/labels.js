@@ -27,12 +27,12 @@ function initials(full){
 
 function tierRole(t){ return t ? (t.label || "") : ""; }
 
-function subline(st, p){
-  const t = st.tiers.find(t => t.id === p.tierId) || st.tiers[0];
+function subline(st, p, lookup){
+  const t = (lookup ? lookup.tiers.get(p.tierId) : st.tiers.find(t => t.id === p.tierId)) || st.tiers[0];
   const role = (p.role && p.role.trim()) || tierRole(t);
   const parts = [];
   if(st.showPersonGrade !== false && role) parts.push(role);
-  const g = groupLabel(st, p);
+  const g = groupLabel(st, p, lookup);
   if(st.showPersonGroup !== false && g) parts.push(g);
   return parts.join("  |  ");
 }

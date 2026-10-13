@@ -17,7 +17,7 @@ const test=(name,run)=>{if(process.env.TIERFORM_TEST_FILTER&&name!==process.env.
 const measure=factor=>({font:'',measureText(text){return {width:String(text).length*factor};}});
 const roster=()=>({...defaults(),title:'A long title for measurement',tiers:[{id:'t',code:'A',label:'Lead',fill:'green',align:'center',merge:false,attach:false}],people:[{id:'p',name:'Jane Example',tierId:'t',groupId:null,role:'',photo:null,pw:0,ph:0,frame:null}]});
 const engine=createLayoutEngine(measure(5));
-test('release identity',()=>assert.equal(VERSION,'2026.10a'));
+test('release identity',()=>assert.equal(VERSION,'2026.10b'));
 test('measurement belongs to each engine instance',()=>{
   const narrow=createLayoutEngine(measure(2));const wide=createLayoutEngine(measure(20));const st=roster();
   const before=narrow.computeLayout(st);const other=wide.computeLayout(st);const after=narrow.computeLayout(st);
@@ -66,6 +66,16 @@ test('bounded history sweeps unreachable photos',()=>{
 test('actual CSV module preserves quoting and column order',()=>{
   const st=roster();st.people[0].name='Jane; "J"';
   assert.equal(toCSV(st),'Name;Grade;Group;Role\r\n"Jane; ""J""";A;;');
+});
+test('label lookups preserve first matches and refresh for each calculation',()=>{
+  const st=roster();st.people[0].groupId='g';
+  st.groups=[{id:'g',label:'First'},{id:'g',label:'Second'}];
+  assert.equal(toCSV(st),'Name;Grade;Group;Role\r\nJane Example;A;First;');
+  assert(engine.computeLayout(st).texts.some(t=>t.segs.some(s=>s.t==='Lead  |  First')));
+  st.tiers=[{...st.tiers[0],code:'B',label:'New'}];
+  st.groups=[{id:'g',label:'Replacement'}];
+  assert.equal(toCSV(st),'Name;Grade;Group;Role\r\nJane Example;B;Replacement;');
+  assert(engine.computeLayout(st).texts.some(t=>t.segs.some(s=>s.t==='New  |  Replacement')));
 });
 test('actual parser and renderer reject markup injection',()=>{
   const verdict=parseAndValidateRoster(JSON.stringify(roster()));const st=verdict.state;st.people[0].name='<script>alert(1)</script>';

@@ -1,3 +1,4 @@
+import { labelIndex, peopleBy } from "../model/indexes.js";
 import { computeLayout } from "../app/layout.js";
 import { PAGES } from "../engine/constants.js";
 import { documentState } from "../model/document.js";
@@ -42,6 +43,7 @@ function drawChart(){
 }
 
 function describeChart(){
+  const byTier = peopleBy(documentState.state.people, "tierId"), lookup = labelIndex(documentState.state);
   const svg = $("#sheet").querySelector("svg");
   const total = documentState.state.people.length;
   const cap = LAYOUTS[documentState.state.layout] || LAYOUTS.pyramid;
@@ -56,7 +58,7 @@ function describeChart(){
       else laneIds.push([t.id]);
     }
     drawn = total
-      ? laneIds.filter(ids => documentState.state.people.some(p => ids.indexOf(p.tierId) >= 0)).length
+      ? laneIds.filter(ids => ids.some(id => byTier.has(id))).length
       : laneIds.length;
   }
 
@@ -75,11 +77,11 @@ function describeChart(){
   if(!host) return;
   const list = el("dl");
   for(const t of documentState.state.tiers){
-    const people = documentState.state.people.filter(p => p.tierId === t.id);
+    const people = (byTier.get(t.id) || []);
     list.appendChild(el("dt", {text: t.label + " (" + t.code + ") — "
       + people.length + (people.length === 1 ? " person" : " people")}));
     list.appendChild(el("dd", {text: people.length
-      ? people.map(p => { const g = groupLabel(documentState.state, p);
+      ? people.map(p => { const g = groupLabel(documentState.state, p, lookup);
           return (p.name || "unnamed") + (g ? ", " + g : ""); }).join("; ")
       : "nobody"}));
   }

@@ -89,7 +89,7 @@ function maskLiterals(src){
 const MASK = maskLiterals(SCRIPT);
 
 function grabFn(name){
-  const start = MASK.search(new RegExp("(^|\\n)(async\\s+)?function\\s+" + name + "\\s*\\("));
+  const start = MASK.search(new RegExp("(^|\\n)[ \t]*(async\\s+)?function\\s+" + name + "\\s*\\("));
   if(start < 0) throw new Error("fixtures: function " + name + " not found — was it renamed?");
   let depth = 0;
   for(let j = MASK.indexOf("{", start); j < MASK.length; j++){
@@ -126,13 +126,14 @@ const PREAMBLE = `
 const M = new Function(PREAMBLE +
   ["FONT","FONTS","PAGES","ANGLES","DENSITY","G","SW","HV","MX","ZOOM_MAX","uid","LIMITS","ENUMS","ANCHORS","HEX6"]
     .map(grabConst).join("\n") + "\n" +
-  ["xmlText","xmlAttr","paint","validatePhoto","isPlainObject","clampText","oneOf",
+  ["xmlText","xmlAttr","paint","parsePhoto","validatePhoto","isPlainObject","clampText","oneOf",
    "validColour","parseAndValidateRoster",
    "splitName","initials","tierOf","tierRole","subline","withAlpha","angleIndex",
    "codeParts","frameRect","frameLimit","clampFrame","normalizeGradeLinks",
 
    "computeLayout","gradeHeadingTexts",
-   "buildBandGroups","buildBandStack","emitHeaderTexts","emitBandPeople",
+   "gridGroups","pageFit","rect","emitAvatar","laneGeometry","emitGridLabels","emitLanePerson",
+   "indexById","labelIndex","peopleBy","buildBandGroups","buildBandStack","emitHeaderTexts","emitBandPeople",
    "computeTriangleLayout","computeHistogramLayout",
    "computePyramidLayout","computeTornadoLayout","computeSwimlaneLayout",
    "computeHiveLayout","computeMatrixLayout",
@@ -571,7 +572,7 @@ try{
       DOC +
 
       ["ZOOM_MAX","ENUMS","LIMITS","HEX6","SVGNS","uid","LAYOUTS"].map(grabConst).join("\n") + "\n" +
-      ["validatePhoto","oneOf","clampText","isPlainObject","initials","codeParts","tierRole",
+      ["parsePhoto","validatePhoto","oneOf","clampText","isPlainObject","initials","codeParts","tierRole",
        "frameRect","frameLimit","clampFrame","normalizeGradeLinks","el","icon","clear","fill","fillTierOptions",
        "personLabel","framePanel","syncFramePreview","placeFramePreview",
 
@@ -589,7 +590,7 @@ try{
 
        "setCommandDisabled","syncAddAvailability","syncStructureAvailability",
 
-       "syncPersonMenu","syncEditModal","renderRoster",
+       "syncPersonMenu","syncEditModal","indexById","labelIndex","peopleBy","renderRoster",
 
        "newGroup","resolveGroupId","groupLabel","pruneGroups"]
         .map(grabFn).join("\n") + "\n" +
@@ -1483,9 +1484,10 @@ try{
 
       ["FONT","FONTS","PAGES","ANGLES","DENSITY","G","SW","HV","MX","ZOOM_MAX","uid","LIMITS","ENUMS","ANCHORS","HEX6",
        "NAME_PT","MIN_NAME_PT","MIN_FACE_PT","LAYOUTS"].map(grabConst).join("\n") + "\n" +
-      ["validatePhoto","oneOf","splitName","initials","tierOf","tierRole","subline","withAlpha",
+      ["parsePhoto","validatePhoto","oneOf","splitName","initials","tierOf","tierRole","subline","withAlpha",
        "angleIndex","codeParts","frameRect","frameLimit","clampFrame","computeLayout",
-       "gradeHeadingTexts","buildBandGroups","buildBandStack","emitHeaderTexts","emitBandPeople",
+       "gradeHeadingTexts","gridGroups","pageFit","rect","emitAvatar","laneGeometry","emitGridLabels","emitLanePerson",
+       "indexById","labelIndex","peopleBy","buildBandGroups","buildBandStack","emitHeaderTexts","emitBandPeople",
        "computeTriangleLayout","computeHistogramLayout","computePyramidLayout","computeTornadoLayout",
        "computeSwimlaneLayout","computeHiveLayout","computeMatrixLayout",
        "nameSegs","ellipsize","fitName","checkLegibility",
@@ -1613,10 +1615,11 @@ try{
        "NAME_PT","MIN_NAME_PT","MIN_FACE_PT","SVGNS",
 
        "TEMPLATES","LAYOUTS"].map(grabConst).join("\n") + "\n" +
-      ["validatePhoto","oneOf","clampText","isPlainObject","paint","xmlText","xmlAttr",
+      ["parsePhoto","validatePhoto","oneOf","clampText","isPlainObject","paint","xmlText","xmlAttr",
        "splitName","initials","tierOf","tierRole","subline","withAlpha","angleIndex","codeParts",
        "frameRect","frameLimit","clampFrame","computeLayout","gradeHeadingTexts",
-       "buildBandGroups","buildBandStack","emitHeaderTexts","emitBandPeople",
+       "gridGroups","pageFit","rect","emitAvatar","laneGeometry","emitGridLabels","emitLanePerson",
+       "indexById","labelIndex","peopleBy","buildBandGroups","buildBandStack","emitHeaderTexts","emitBandPeople",
        "computeTriangleLayout","computeHistogramLayout",
        "computePyramidLayout","computeTornadoLayout",
        "computeSwimlaneLayout","computeHiveLayout","computeMatrixLayout","nameSegs","ellipsize","fitName","toSVG","el","icon","clear","fill",

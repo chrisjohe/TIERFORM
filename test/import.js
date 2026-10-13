@@ -88,7 +88,7 @@ function maskLiterals(src){
 const MASK = maskLiterals(SCRIPT);
 
 function grabFn(name){
-  const start = MASK.search(new RegExp("(^|\\n)(async\\s+)?function\\s+" + name + "\\s*\\("));
+  const start = MASK.search(new RegExp("(^|\\n)[ \t]*(async\\s+)?function\\s+" + name + "\\s*\\("));
   if(start < 0) throw new Error("import: function " + name + " not found — was it renamed?");
   let depth = 0;
   for(let j = MASK.indexOf("{", start); j < MASK.length; j++){
@@ -227,12 +227,13 @@ const M = new Function(PREAMBLE +
    "PHOTO_SCAN_BYTES","B64_ALPHABET","B64_VALUES","PNG_SIGNATURE","JPEG_MAX_SEGMENTS",
    "DECODE_CANCELLED"]
     .map(grabConst).join("\n") + "\n" +
-  ["xmlText","xmlAttr","paint","validatePhoto","isPlainObject","clampText","oneOf","validColour",
+  ["xmlText","xmlAttr","paint","parsePhoto","validatePhoto","isPlainObject","clampText","oneOf","validColour",
    "parseAndValidateRoster","splitName","initials","tierOf","tierRole","subline","withAlpha",
    "angleIndex","codeParts","frameRect","frameLimit","clampFrame","normalizeGradeLinks",
 
    "computeLayout","gradeHeadingTexts",
-   "buildBandGroups","buildBandStack","emitHeaderTexts","emitBandPeople",
+   "gridGroups","pageFit","rect","emitAvatar","laneGeometry","emitGridLabels","emitLanePerson",
+   "indexById","labelIndex","peopleBy","buildBandGroups","buildBandStack","emitHeaderTexts","emitBandPeople",
    "computeTriangleLayout","computeHistogramLayout",
    "computePyramidLayout","computeTornadoLayout","computeSwimlaneLayout",
    "computeHiveLayout","computeMatrixLayout",
@@ -1209,7 +1210,7 @@ function jpegBytes(w, h, sof){
 
      "PHOTO_SCAN_BYTES","B64_ALPHABET","B64_VALUES","PNG_SIGNATURE","JPEG_MAX_SEGMENTS"]
       .map(grabConst).join("\n") + "\n" +
-    ["validatePhoto","photoBytes","be32","pngHeaderSize","isSofMarker","jpegHeaderSize",
+    ["parsePhoto","validatePhoto","photoBytes","be32","pngHeaderSize","isSofMarker","jpegHeaderSize",
      "photoHeader","photoSizeProblem","sizeMatchesHeader"].map(grabFn).join("\n") + "\n" +
     "let NEXT = {w:0, h:0, url:''};\n" +
 

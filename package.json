@@ -1,6 +1,6 @@
 {
   "name": "tierform",
-  "version": "2026.10.0-a",
+  "version": "2026.10.0-b",
   "private": true,
   "scripts": {
     "build": "node scripts/build.mjs",

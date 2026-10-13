@@ -34,10 +34,11 @@ function resolveGroupId(st, text){
   return g.id;
 }
 
-function groupLabel(st, p){
+function groupLabel(st, p, lookup){
   const id = p && p.groupId;
   if(!id) return "";
-  const g = (st && Array.isArray(st.groups) ? st.groups : []).find(g => g && g.id === id);
+  const g = lookup ? lookup.groups.get(id)
+    : (st && Array.isArray(st.groups) ? st.groups : []).find(g => g && g.id === id);
   return (g && g.label) || "";
 }
 

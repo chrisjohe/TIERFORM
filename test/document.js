@@ -217,7 +217,7 @@ function maskLiterals(src){
 const MASK = maskLiterals(SCRIPT);
 
 function grabFn(name){
-  const start = MASK.search(new RegExp("(^|\\n)(async\\s+)?function\\s+" + name + "\\s*\\("));
+  const start = MASK.search(new RegExp("(^|\\n)[ \t]*(async\\s+)?function\\s+" + name + "\\s*\\("));
   if(start < 0) throw new Error("not found: function " + name);
   let depth = 0;
   for(let j = MASK.indexOf("{", start); j < MASK.length; j++){
@@ -292,7 +292,7 @@ const FNS   = ["historyCheckpoint","restoreHistory","clearHistory","updateDocLab
 
                "saveDoc","stateLimitProblem","encodedPhotoBytes","photoBudgetExceeded","openDoc","fileStem",
 
-               "toCSV",
+               "indexById","labelIndex","peopleBy","toCSV",
                "firstTierId",
 
                "newTier",
@@ -339,9 +339,9 @@ const FNS   = ["historyCheckpoint","restoreHistory","clearHistory","updateDocLab
 
                "gradeName","moveTarget","moveLabelTo","moveLabel","movePerson",
 
-               "personSlot","personDropIsNoop","walkOnce","reorderPerson",
+               "personSlot","personDropIsNoop","planPersonOrder","reorderPerson",
 
-               "personLabel","validatePhoto","moveAffordance","syncRowIdentity",
+               "personLabel","parsePhoto","validatePhoto","moveAffordance","syncRowIdentity",
 
                "rosterFiltered","personMatches","clearRosterSearch",
 
@@ -412,7 +412,6 @@ const PREAMBLE = `
   /* renderAll rebuilds the roster on its way through, which is what puts an
      undone photo back into the open dialog. Same standing as the two calls
      below: that the APP'S renderAll does it is test/dom.js's assertion. */
-  const STEPS = {n:0};
   function renderAll(){ renderRoster(); }
   /* The two the real renderRoster makes at this point, and the reason a commit
      from inside the dialog is a whole path here rather than a call followed by
@@ -1144,29 +1143,7 @@ function makeModule(){
            event exactly as the two listeners are driven for real. */
         beforeUnload, keydownHandler,
         gradeName, moveTarget, moveLabel, moveLabelTo, movePerson, syncRowIdentity,
-        /* The drop entry point, plus a way to make its step refuse. The bound
-           and the restore are only reachable through a movePerson that stops
-           making progress, and there is no roster shape that produces one — so
-           the step is broken deliberately, and the SHIPPED guard, restore and
-           report are what run. */
         reorderPerson,
-        /* STEPS counts the calls the walk actually makes. Without it the
-           progress check is invisible: the fuel bound catches a step that never
-           moves anyone too, just N spins later, so "it stops when a step changes
-           nothing" and "it stops eventually" are the same assertion until the
-           number of steps is readable. */
-        get steps(){ return STEPS.n; },
-        resetSteps(){ STEPS.n = 0; },
-        /* n real steps, then a step that achieves nothing. breakTheStep() alone
-           stalls on the FIRST call, so nobody is ever half-moved and the array
-           restore is never the thing that puts the roster back — it passed with
-           the restore deleted. This leaves a person genuinely mid-walk. */
-        breakTheStepAfter(n){
-          let left = n;
-          const real = movePerson;
-          movePerson = (id, dir) => { STEPS.n++; if(left-- > 0) real(id, dir); };
-        },
-        breakTheStep(){ movePerson = ()=>{ STEPS.n++; }; },
         commands: COMMANDS,
         snapshot, undo, redo, canUndo, canRedo, fileStem, toCSV,
         /* the second-dimension entity: groupLabel is the one reader every
@@ -5189,41 +5166,16 @@ async function runSuite(){
     const N = makeModule();
     N.state = N.defaults();
     N.state.tiers = sixGrades();
-    const TT = N.state.tiers;
-
-    const nk = (name, ti) => ({id:"p" + name, name:name, tierId:TT[ti].id,
-                               groupId:null, role:"", photo:null, pw:0, ph:0, frame:null});
-    N.state.people = [nk("Ana",0), nk("Cy",1), nk("Bo",0)];
-    const was = N.state.people.map(p => p.name + "@" + p.tierId).join(",");
-    const entries = N.history.length;
-
-    N.resetSteps();
-    N.breakTheStep();
-    const done = N.reorderPerson(N.state.people[0].id, N.state.people[2].id, true);
-    eq(done, false, "a walk that cannot make progress reports failure");
-
-    eq(N.steps, 1,
-      "…on the FIRST step that achieves nothing, not after spending the whole "
-      + "bound — got " + N.steps + " steps");
-    eq(N.history.length, entries + 1,
-      "the attempt is still one entry, so the no-op is one undo away either way");
-    check(N.alerts.some(a => /could not be completed/.test(a)),
-      "…and it says so rather than failing silently — got " + JSON.stringify(N.alerts));
-
-    const P = makeModule();
-    P.state = P.defaults();
-    P.state.tiers = sixGrades();
-    const PT = P.state.tiers;
-    const pk = (name, ti) => ({id:"q" + name, name:name, tierId:PT[ti].id,
-                               groupId:null, role:"", photo:null, pw:0, ph:0, frame:null});
-    P.state.people = [pk("Ana",0), pk("Bo",0), pk("Cy",0), pk("Di",2)];
-    const orderWas = P.state.people.map(p => p.name + "@" + p.tierId).join(",");
-    P.breakTheStepAfter(1);
-    const moved = P.reorderPerson("qAna", "qDi", true);
-    eq(moved, false, "a walk that stalls part-way reports failure");
-    eq(P.state.people.map(p => p.name + "@" + p.tierId).join(","), orderWas,
-      "…and puts back BOTH halves — the array order and the tierId — so nobody is "
-      + "left standing between two grades");
+    N.state.people = [
+      {id:"orphan", name:"Orphan", tierId:"missing", groupId:null, photo:null},
+      {id:"target", name:"Target", tierId:N.state.tiers[0].id, groupId:null, photo:null}
+    ];
+    const before = JSON.stringify(N.state.people), entries = N.history.length;
+    eq(N.reorderPerson("orphan", "target", true), false,
+      "a source grade that no longer exists refuses the move");
+    eq(JSON.stringify(N.state.people), before, "a refused plan changes neither order nor grade");
+    eq(N.history.length, entries + 1, "the refused attempt keeps the existing undo behavior");
+    check(N.alerts.some(a => /could not be completed/.test(a)), "the refused move is reported");
   }
 }
 
