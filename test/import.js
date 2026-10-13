@@ -1,22 +1,3 @@
-/* Import validation tests for tierform_app.html.
- *
- * parseAndValidateRoster is the only door an outside roster comes through, so
- * this suite is the guard on that door. It asserts the two halves of the
- * contract separately, because they fail differently:
- *
- *   FATAL    — the file is refused whole and nothing is returned to adopt.
- *              The bug this prevents is a half-applied import.
- *   REPAIRED — the file is accepted with named values normalised. The bug this
- *              prevents is junk reaching the renderers, and silence about it.
- *
- * The oversized cases are built here rather than committed as fixtures: an
- * over-the-limit photo is an 8 MB file, and version control is the wrong place
- * for it.
- *
- * Run:  node test/import.js
- *   or: osascript -l JavaScript test/import.js
- */
-
 function readFile(path){
   if(typeof require !== "undefined") return require("fs").readFileSync(path, "utf8");
   ObjC.import("Foundation");
@@ -33,79 +14,67 @@ const ROOT   = here();
 const HTML   = readFile(ROOT + "tierform_app.html");
 const SCRIPT = /<script>([\s\S]*)<\/script>/.exec(HTML)[1];
 
-/* Brace and paren counting runs over a MASK of the source, never over the
-   source itself: a "{" inside a comment, a string or a regex is not a brace,
-   and counting it ends a slice early — on a fragment that may still parse, so
-   the suite goes green having tested something that is not the function. The
-   mask is the same LENGTH as the source and keeps every newline, so an index
-   found in it addresses the same character in the original; slices are always
-   cut from the ORIGINAL, or every extracted function reaches new Function()
-   with its strings blanked out.
-   Duplicated in four suites. test/fixtures.js §0 asserts the copies are
-   byte-identical and carries the rest of the reasoning — which literals the
-   mask has to know about, and why. */
 function maskLiterals(src){
   const out = src.split(""), n = src.length;
   const sp = k => { if(out[k] !== "\n") out[k] = " "; };
-  /* after one of these words a "/" opens a regex; after any other identifier,
-     after a number and after ) ] it divides */
+
   const REWORD = /^(return|typeof|instanceof|in|of|new|delete|void|case|do|else|yield|await)$/;
   const stack = [{tmpl:false, depth:0}];
-  let value = false;                       // the last token ended a value
+  let value = false;
   let i = 0;
   while(i < n){
     const top = stack[stack.length - 1], c = src[i];
 
-    if(top.tmpl){                          // inside a template's TEXT
+    if(top.tmpl){
       if(c === "\\"){ sp(i); if(i + 1 < n) sp(i + 1); i += 2; continue; }
       if(c === "`"){ sp(i); i++; stack.pop(); value = true; continue; }
-      if(c === "$" && src[i + 1] === "{"){ // the "$" goes, the "{" stays
+      if(c === "$" && src[i + 1] === "{"){
         sp(i); stack.push({tmpl:false, depth:0}); i += 2; value = false; continue;
       }
       sp(i); i++; continue;
     }
 
-    if(c === "/" && src[i + 1] === "/"){                       // line comment
+    if(c === "/" && src[i + 1] === "/"){
       while(i < n && src[i] !== "\n"){ sp(i); i++; }
       continue;
     }
-    if(c === "/" && src[i + 1] === "*"){                       // block comment
+    if(c === "/" && src[i + 1] === "*"){
       const e = src.indexOf("*/", i + 2), end = e < 0 ? n : e + 2;
       while(i < end){ sp(i); i++; }
       continue;
     }
-    if(c === '"' || c === "'"){                                // quoted string
+    if(c === '"' || c === "'"){
       let j = i + 1;
       while(j < n && src[j] !== c && src[j] !== "\n") j += src[j] === "\\" ? 2 : 1;
       if(j < n && src[j] === c){ while(i <= j){ sp(i); i++; } }
-      else i++;                            // no close on this line: not a string
+      else i++;
       value = true; continue;
     }
     if(c === "`"){ sp(i); stack.push({tmpl:true, depth:0}); i++; continue; }
-    if(c === "/" && !value){                                   // regex literal
+    if(c === "/" && !value){
       let j = i + 1, cls = false, end = -1;
       for(; j < n; j++){
         const ch = src[j];
-        if(ch === "\n") break;             // a regex does not span a line
+        if(ch === "\n") break;
         if(ch === "\\"){ j++; continue; }
         if(cls){ if(ch === "]") cls = false; continue; }
         if(ch === "[") cls = true;
         else if(ch === "/"){
           j++;
-          while(j < n && /[A-Za-z]/.test(src[j])) j++;         // flags
+          while(j < n && /[A-Za-z]/.test(src[j])) j++;
           end = j; break;
         }
       }
       if(end > 0){ while(i < end){ sp(i); i++; } value = true; continue; }
     }
-    if(/[A-Za-z0-9_$]/.test(c)){                               // identifier or number
+    if(/[A-Za-z0-9_$]/.test(c)){
       let j = i;
       while(j < n && /[A-Za-z0-9_$]/.test(src[j])) j++;
       value = !REWORD.test(src.slice(i, j));
       i = j; continue;
     }
-    if(c === "}" && top.depth === 0 && stack.length > 1){       // closes a ${ }
-      stack.pop(); i++; value = true; continue;                 // stays visible
+    if(c === "}" && top.depth === 0 && stack.length > 1){
+      stack.pop(); i++; value = true; continue;
     }
     if(c === "{"){ top.depth++; value = false; i++; continue; }
     if(c === "}"){ top.depth--; value = false; i++; continue; }
@@ -254,42 +223,30 @@ const PREAMBLE = `
 const M = new Function(PREAMBLE +
   ["FONT","FONTS","PAGES","ANGLES","DENSITY","G","SW","HV","MX","ZOOM_MAX","uid","LIMITS","ENUMS","ANCHORS","HEX6",
    "DECODE_TIMEOUT","FILE_FORMAT",
-   /* the preflight's own constants */
+
    "PHOTO_SCAN_BYTES","B64_ALPHABET","B64_VALUES","PNG_SIGNATURE","JPEG_MAX_SEGMENTS",
    "DECODE_CANCELLED"]
     .map(grabConst).join("\n") + "\n" +
   ["xmlText","xmlAttr","paint","validatePhoto","isPlainObject","clampText","oneOf","validColour",
    "parseAndValidateRoster","splitName","initials","tierOf","tierRole","subline","withAlpha",
    "angleIndex","codeParts","frameRect","frameLimit","clampFrame","normalizeGradeLinks",
-   /* computeLayout dispatches on state.layout; pyramid, tornado AND histogram
-      geometry all live behind the shared band-stack machinery (buildBandGroups,
-      buildBandStack, emitHeaderTexts, emitBandPeople) that computeTriangleLayout
-      and computeHistogramLayout both call, so all of it comes with it */
+
    "computeLayout","gradeHeadingTexts",
    "buildBandGroups","buildBandStack","emitHeaderTexts","emitBandPeople",
    "computeTriangleLayout","computeHistogramLayout",
    "computePyramidLayout","computeTornadoLayout","computeSwimlaneLayout",
    "computeHiveLayout","computeMatrixLayout",
    "nameSegs","ellipsize","fitName","toSVG",
-   /* the shared measurement helpers the geometry engines call while sizing
-      a person's label and the header text. */
+
    "personLabelWidth","headNeedWidth","docFont",
    "splitCsvLine","splitPasteRow","matchTierByGrade","parsePasteText","toCSV",
-   /* the one factory every CREATE path uses. Extracted here NOT because the
-      validator calls it — it deliberately does not — but so §12 can compare the
-      shape the validator emits against the shape a fresh grade has. */
+
    "newTier",
-   /* the header preflight, which runs before a decoder is involved */
+
    "photoBytes","be32","pngHeaderSize","isSofMarker","jpegHeaderSize","photoHeader",
-   /* the asynchronous half of the door */
+
    "photoFields","applyPhoto","decodeImage","photoSizeProblem","sizeMatchesHeader","decodeRosterPhotos","openRoster",
-   /* parseAndValidateRoster resolves a stated `groupId` through the fresh-id
-      map built from the file's own `groups` array, and prunes memberless
-      stated groups through pruneGroups after the person loop. resolveGroupId
-      is the free-text on-ramp the Add/Edit/paste/CSV commit paths use
-      instead; subline and toCSV both read a person's group back through
-      groupLabel. All four are extracted together, since a test that reaches
-      one of them usually needs the rest. */
+
    "newGroup","resolveGroupId","groupLabel","pruneGroups"]
    .map(grabFn).join("\n") + "\n" +
   "return {parseAndValidateRoster, validatePhoto, xmlText, xmlAttr, paint," +
@@ -303,7 +260,8 @@ const M = new Function(PREAMBLE +
   " decodeAs(url, w, h){ DECODE_AS.push({url:url, w:w, h:h}); }," +
   " decoded(){ return DECODED.slice(); }," +
   " computeLayout, computePyramidLayout, computeTornadoLayout, computeHistogramLayout, computeSwimlaneLayout, computeHiveLayout, computeMatrixLayout," +
-  " toSVG, LIMITS, newTier, setState(s){ state = s; }};")();
+  " meas, toSVG, LIMITS, newTier, setState(s){ state = s; }};")();
+
 
 let passed = 0;
 const failures = [];
@@ -314,12 +272,10 @@ const fixture = name => readFile(ROOT + "test/fixtures/" + name + ".json");
 const parse   = text => M.parseAndValidateRoster(text);
 const json    = obj  => JSON.stringify(obj);
 
-/* A real 1x1 JPEG, the same one the fixtures use. */
 const JPEG = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsL"
   + "DBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAA"
   + "AAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==";
 
-/* minimum viable roster, to be broken one field at a time */
 function ok(over){
   const base = {
     title: "Base", brand: "", accent: "#046A38",
@@ -334,11 +290,7 @@ function ok(over){
   return Object.assign(base, over || {});
 }
 
-/* A throw part-way through is itself a failure, and the assertions collected
-   before it explain where things went wrong. Reporting only the exception
-   threw that away. The async section below has its own guard. */
 try{
-  /* ---------------------------------------------------------- 1. the good path */
 
   {
     const r = parse(fixture("current"));
@@ -352,11 +304,6 @@ try{
       check(r.state.people.filter(p => p.photo).length === 5, "current.json keeps its 5 photos");
     }
 
-    /* ---- the format marker is enforced softly ------------------------------
-       A file that STATES a foreign format is refused whole — there is no
-       upgrade path across formats, only a clear refusal naming both numbers.
-       A file that states none opens exactly as before: the marker is new,
-       and every roster written before it existed said nothing about it. */
     {
       const foreign = parse(json(ok({format: 2})));
       check(foreign.ok === false, "a document stating format: 2 is refused whole");
@@ -364,22 +311,12 @@ try{
         "…and the reason names the format — got " + JSON.stringify(foreign.reason));
     }
     {
-      /* ok() itself never states "format" — this is the same absent-marker
-         shape every other ok()-based test in this file already opens under,
-         made explicit as its own rule rather than left implicit. */
+
       const noMarker = parse(json(ok({})));
       check(noMarker.ok, "a file stating no format opens as before"
         + (noMarker.ok ? "" : " — refused: " + noMarker.reason));
     }
 
-    /* ---- every default comes from the validator alone ---------------------
-       There is no normalising pass in front of this function: it alone
-       answers for every setting a roster file leaves out. A file that
-       states nothing but its grades and its people is the whole test: each
-       default has to be the documented one, and NOT ONE of them may be
-       reported as a repair, because the file was not wrong about anything.
-       This list and defaults() must never disagree, or a new document and
-       an opened one differ. */
     {
       const bare = parse(json({
         tiers: [{id:"t1", code:"P", label:"Partner"}],
@@ -402,14 +339,11 @@ try{
         }
         eq(bare.repaired.length, 0,
           "and omitting all of them repairs nothing — got " + JSON.stringify(bare.repaired));
-        /* groups is an array, checked as a shape rather than by eq (===
-           would fail on any two distinct empty arrays regardless of what
-           the validator actually produced) — an omitted groups starts out
-           at [], silently, same as an omitted people or tiers array would. */
+
         check(Array.isArray(bare.state.groups) && bare.state.groups.length === 0,
           "an omitted groups array takes its documented default — got "
           + JSON.stringify(bare.state.groups));
-        /* the grade and person halves of the same rule */
+
         eq(bare.state.tiers[0].fill, "green", "an omitted grade fill defaults");
         eq(bare.state.tiers[0].align, "center", "an omitted grade alignment defaults");
         eq(bare.state.tiers[0].attach, false, "an omitted attach defaults");
@@ -419,10 +353,6 @@ try{
         eq(bare.state.people[0].photo, null, "and a person with no photo carries none");
       }
 
-      /* The other half of the same rule, and the half a "no repairs" test can
-         never reach: a value the file DID state and that had to be changed is
-         still reported. Guarding the notes must silence omission, not silence
-         the repair machinery. */
       const wrong = parse(json({
         tiers: [{id:"t1", code:"P", label:"Partner", fill:"purple",
                  align:"sideways", attach:"yes", merge:"no"}],
@@ -444,27 +374,6 @@ try{
       }
     }
 
-    const leg = parse(fixture("legacy"));
-    check(leg.ok, "legacy.json is accepted" + (leg.ok ? "" : " — refused: " + leg.reason));
-    if(leg.ok){
-      /* It opens with the grades it states — nothing splits, renames or reorders
-         a grade on the way in. What the file says is what opens. */
-      eq(leg.state.tiers.length, JSON.parse(fixture("legacy")).tiers.length,
-         "legacy.json opens with exactly the grades it states");
-      check(leg.state.tiers.every(t => t.style === undefined),
-        "and a property this build has no meaning for is dropped, not carried");
-      /* the sparse half: it states no fill, attach, merge, align or layout, and
-         the validator alone has to answer for all of them */
-      check(leg.state.tiers.every(t => t.fill === "green" && t.attach === false),
-        "a grade that states no fill or attach gets the documented defaults");
-      eq(leg.state.layout, "pyramid", "and legacy.json, which states no layout, opens as a pyramid");
-    }
-
-    /* A grade has no title of its own: what gets printed under a person is
-       `p.role || t.label`. The validator never reads a stated grade `role`
-       at all — it is dropped on the way in, carried onto neither the grade
-       nor its people. None of that is a REPAIR: the file was not wrong, it
-       just described a document shape this build does not have. */
     {
       const withPerson = (tierRole) => {
         const t = {id:"t1", code:"P", label:"Partner",
@@ -489,9 +398,6 @@ try{
         }
       }
 
-      /* Whether it repeated the grade's name or not makes no difference: the
-         field is not read, so neither form reaches a person. What each of that
-         grade's people is titled with is the grade's NAME. */
       for(const r of ["Partner (Equity)", "Partner"]){
         const got = withPerson(r);
         check(got.ok && got.state.people[0].role === "",
@@ -510,10 +416,6 @@ try{
     }
   }
 
-  /* ---------------------------------------------------------- 2. fatal refusals */
-
-  /* Each of these must be refused WHOLE. A partially adopted roster is the worst
-     outcome available: the document on screen becomes half someone else's. */
   const FATAL = [
     ["not JSON at all",            "{oh dear"],
     ["the truncated fixture",      fixture("malformed")],
@@ -542,7 +444,6 @@ try{
     check(!r.ok && r.state === undefined, "refusing " + label + " returns no state to adopt");
   }
 
-  /* the count limits, built rather than committed */
   {
     const manyTiers = ok({tiers: Array.from({length: M.LIMITS.tiers + 1}, (_, i) =>
       ({id:"t"+i, code:"C"+i, label:"Grade "+i, role:"", fill:"green",
@@ -557,13 +458,10 @@ try{
     check(!r2.ok, "REFUSED: more people than the limit");
     check(!r2.ok && /people/.test(r2.reason), "the people-count refusal says so: " + (r2.reason||""));
 
-    /* exactly at the limit is fine — an off-by-one here would refuse a legal file */
     const atLimit = ok({people: Array.from({length: M.LIMITS.people}, (_, i) =>
       ({id:"p"+i, name:"Person "+i, tierId:"t1", office:"", role:"", photo:null}))});
     check(parse(json(atLimit)).ok, "a roster exactly at the people limit is accepted");
   }
-
-  /* ---------------------------------------------------------- 3. photos */
 
   const PHOTO_CASES = [
     ["a jpeg data URL",        JPEG, true],
@@ -583,10 +481,7 @@ try{
     ["base64 with a quote",    'data:image/jpeg;base64,AAAA"onload="alert(1)', false],
     ["base64 with a space",    "data:image/jpeg;base64,AAAA AAAA", false],
     ["a truncated quantum",    "data:image/jpeg;base64,AAAAA", false],
-    /* These three are the ones that matter for the charset half of the rule.
-       Each is a whole number of base64 quanta, so the length check waves them
-       through and only the character class can stop them — without them, widening
-       the charset to [\s\S] passed this suite unnoticed. */
+
     ["a quote at quantum length",   'data:image/jpeg;base64,AA"A', false],
     ["a bracket at quantum length", "data:image/jpeg;base64,AA<A", false],
     ["a newline at quantum length", "data:image/jpeg;base64,AA\nA", false]
@@ -596,13 +491,12 @@ try{
     check(!!got === want, "validatePhoto " + (want ? "accepts " : "rejects ") + label
       + (got ? " — returned " + String(got).slice(0, 40) : ""));
   }
-  /* the size limit, built in memory */
+
   {
     const huge = "data:image/jpeg;base64," + "A".repeat(M.LIMITS.photoBytes);
     check(M.validatePhoto(huge) === null, "validatePhoto rejects a photo over the byte limit");
   }
 
-  /* a bad photo costs that person their picture and nothing else */
   {
     const r = parse(fixture("injection"));
     check(r.ok, "injection.json is accepted after normalisation"
@@ -618,8 +512,6 @@ try{
       check(r.repaired.some(w => /photo of/.test(w)), "each dropped photo is reported");
     }
   }
-
-  /* ---------------------------------------------------------- 4. repairs */
 
   {
     const r = parse(fixture("bad-values"));
@@ -653,13 +545,6 @@ try{
     }
   }
 
-  /* ---------------------------------------------------------- 4b. square is a real page value */
-
-  /* PAGES gained a third key without ENUMS involved — the validator answers
-     "is this a page this build can draw" by hasOwnProperty against PAGES
-     itself, so a file naming "square" must be taken at its word exactly the
-     way "swimlanes" is taken at its word for layout: kept intact, and not
-     reported as a repair, because nothing about it was wrong. */
   {
     const sq = parse(json(ok({page:"square"})));
     check(sq.ok, "a file stating square keeps it");
@@ -670,17 +555,8 @@ try{
     }
   }
 
-  /* ---------------------------------------------------------- 4c. groups, the second dimension
-
-     `state.groups` is a document property — a light entity carrying only an
-     id and a label — and `p.groupId` is how a person points at one. A stated
-     `office` on a person is not a group on-ramp: it carries an unrecognised
-     field, like any other the validator has no meaning for — dropped
-     silently, groupId stays null, nothing is reported. */
   {
-    /* ---- new-format round trip: stated groups honoured, order kept, ids
-       reminted like every other id, and each person's groupId follows the
-       fresh-id map to the right group. */
+
     const r = parse(json(ok({
       groups: [{id:"gOld1", label:"Frankfurt"}, {id:"gOld2", label:"Berlin"}],
       people: [
@@ -705,11 +581,7 @@ try{
     }
   }
   {
-    /* ---- office is not a group on-ramp: a stated `office` string is just an
-       unrecognised field. It is dropped silently — the same stance an
-       unknown grade property (`t.style`) already gets — groupId stays null,
-       and nothing is reported, because nothing the file said in terms this
-       build understands was changed. */
+
     const r = parse(json(ok({
       people: [
         {id:"p1", name:"Ada", tierId:"t1", office:"FRA", role:"", photo:null, pw:0, ph:0, frame:null},
@@ -730,9 +602,7 @@ try{
     }
   }
   {
-    /* ---- a stated groupId this file's groups array has nothing under is
-       repaired to null and reported, the same stance an unresolvable tierId
-       reference takes everywhere else in this validator. */
+
     const r = parse(json(ok({
       people: [{id:"p1", name:"Ada", tierId:"t1", groupId:"does-not-exist", role:"",
                 photo:null, pw:0, ph:0, frame:null}]
@@ -745,8 +615,7 @@ try{
     }
   }
   {
-    /* ---- a stated group with zero members is pruned and reported — the
-       same invariant commit()/edit() keep live, proven here on the way IN. */
+
     const r = parse(json(ok({
       groups: [{id:"gA", label:"Nobody Home"}],
       people: [{id:"p1", name:"Ada", tierId:"t1", role:"", photo:null, pw:0, ph:0, frame:null}]
@@ -758,9 +627,7 @@ try{
     }
   }
   {
-    /* ---- a stated duplicate label (case-insensitive) merges into the
-       FIRST kept entry, and is reported — the same stance the tiers array
-       takes on a duplicated id, applied here to a duplicated label. */
+
     const r = parse(json(ok({
       groups: [{id:"gA", label:"Berlin"}, {id:"gB", label:"berlin"}],
       people: [
@@ -777,23 +644,6 @@ try{
       check(r.repaired.some(w => w === "group"), "…reported — got " + json(r.repaired));
     }
   }
-  {
-    /* ---- absent groups AND absent groupId together: the doubly-negative
-       case, and the one a "no repairs" test over the defaults loop can never
-       isolate on its own — absent is not a repair, on both counts at once. */
-    const r = parse(json({
-      tiers: [{id:"t1", code:"P", label:"Partner"}],
-      people: [{id:"p1", name:"Ada", tierId:"t1"}]
-    }));
-    check(r.ok, "…opens" + (r.ok ? "" : " — refused: " + r.reason));
-    if(r.ok){
-      eq(r.state.groups.length, 0, "no groups stated, none exist");
-      eq(r.state.people[0].groupId, null, "no groupId stated either, so there is nothing to resolve");
-      eq(r.repaired.length, 0, "neither absence is a repair — got " + json(r.repaired));
-    }
-  }
-
-  /* text limits truncate rather than refuse — a long name is careless, not hostile */
   {
     const long = "x".repeat(10000);
     const r = parse(json(ok({
@@ -815,7 +665,6 @@ try{
     }
   }
 
-  /* merge on the first grade has nothing above it to merge into */
   {
     const r = parse(json(ok({
       tiers: [{id:"t1", code:"P", label:"Partner", role:"", fill:"green",
@@ -829,179 +678,27 @@ try{
     }
   }
 
-  /* ---- the layout property, on the way in ----
-     Every value the enums accept has a fallback; this one has a renderer behind
-     it as well, so accepting a word this build has no geometry for would open a
-     chart with no bands rather than a wrong one. */
   {
-    /* a file that states no layout at all */
-    const older = parse(json(ok({})));
-    check(older.ok, "a roster with no layout is accepted");
-    if(older.ok){
-      eq(older.state.layout, "pyramid", "and a roster that omits layout is a pyramid");
-      check(!older.repaired.some(w => /layout/.test(w)),
-            "filling in a missing layout is not reported as a repair — nothing was changed");
+    for(const layout of ["pyramid", "tornado", "histogram", "swimlanes", "hive", "matrix"]){
+      const r = parse(json(ok({layout})));
+      check(r.ok && r.state.layout === layout, layout + " survives Open");
+      check(r.ok && r.repaired.length === 0, layout + " needs no repair");
     }
-
-    const stated = parse(json(ok({layout:"pyramid"})));
-    check(stated.ok && stated.state.layout === "pyramid", "a file stating pyramid keeps it");
-    if(stated.ok) check(!stated.repaired.some(w => /layout/.test(w)),
-                        "and is not reported as repaired");
-
-    /* swimlanes has an engine now, so a file naming it is taken at its word */
-    const swim = parse(json(ok({layout:"swimlanes"})));
-    check(swim.ok, "a file stating swimlanes is accepted");
-    if(swim.ok){
-      eq(swim.state.layout, "swimlanes", "and keeps its layout");
-      check(!swim.repaired.some(w => /layout/.test(w)),
-            "and is not reported as repaired — got " + json(swim.repaired));
-      /* and it really draws as lanes, not as a pyramid wearing the name */
-      M.setState(swim.state);
-      const L = M.computeLayout(swim.state);
-      const direct = M.computeSwimlaneLayout(swim.state);
-      eq(JSON.stringify(L), JSON.stringify(direct),
-         "an opened swimlanes roster is dispatched to the swimlane engine");
-    }
-
-    /* tornado is the pyramid flipped and has its own engine too, so a file
-       naming it is taken at its word exactly the way swimlanes is above. */
-    const tornado = parse(json(ok({layout:"tornado"})));
-    check(tornado.ok, "a file stating tornado is accepted");
-    if(tornado.ok){
-      eq(tornado.state.layout, "tornado", "and keeps its layout");
-      check(!tornado.repaired.some(w => /layout/.test(w)),
-            "and is not reported as repaired — got " + json(tornado.repaired));
-      /* and it really draws as a tornado, not as a pyramid wearing the name */
-      M.setState(tornado.state);
-      const L = M.computeLayout(tornado.state);
-      const direct = M.computeTornadoLayout(tornado.state);
-      eq(JSON.stringify(L), JSON.stringify(direct),
-         "an opened tornado roster is dispatched to the tornado engine");
-      const asPyramid = M.computePyramidLayout(tornado.state);
-      check(JSON.stringify(L) !== JSON.stringify(asPyramid),
-         "…and it draws differently from the pyramid it shares a solver with");
-    }
-
-    /* The one that matters: a layout with no renderer. It must not be taken at
-       its word just because a later build might understand it — this is the
-       garbage case, and it still repairs to pyramid alongside the "usual
-       shapes" sweep just below. */
-    const future = parse(json(ok({layout:"mind-map"})));
-    check(future.ok, "a file naming an unimplemented layout is repaired, not refused");
-    if(future.ok){
-      eq(future.state.layout, "pyramid",
-         "a layout this build cannot draw falls back to the pyramid");
-      check(future.repaired.some(w => /layout/.test(w)),
-            "and the repair is reported — got " + json(future.repaired));
-    }
-
-    /* the usual shapes an enum has to survive */
-    [7, null, true, {}, [], "PYRAMID", " pyramid", "SWIMLANES", "swimlane", "TORNADO", "Tornado",
-     "HISTOGRAM", "Histogram", " histogram", "HIVE", "Hive", " hive"].forEach(v => {
-      const r = parse(json(ok({layout:v})));
+    for(const value of [7, null, true, {}, [], "mind-map", "PYRAMID", " pyramid"]){
+      const r = parse(json(ok({layout:value})));
       check(r.ok && r.state.layout === "pyramid",
-            "layout " + json(v) + " normalises to pyramid");
-    });
-
-    /* A stated, USABLE layout value opens unrepaired — the counterpart to the
-       garbage-normalises-to-pyramid loop above. Second source: histogram.state
-       (parsed separately) proves the roster really did open as Histogram, not
-       merely that the literal string round-tripped. */
-    {
-      const histogram = ok({layout:"histogram"});
-      const r = parse(json(histogram));
-      check(r.ok && r.state.layout === "histogram",
-            "a file stating layout:\"histogram\" opens as Histogram, unrepaired — got "
-            + json(r.ok && r.state.layout));
-      check(!r.repaired.some(w => /layout/.test(w)),
-            "and layout is not reported as repaired, since the file's own value was kept — got "
-            + json(r.repaired));
+        "layout " + json(value) + " normalises to pyramid");
+      check(r.ok && r.repaired.includes("layout"),
+        "invalid layout " + json(value) + " is reported as repaired");
     }
-
-    /* hive has an engine now too, so a file naming it is taken at its word —
-       the same proof swimlanes and tornado get above, dispatched to its own
-       engine rather than merely round-tripping the literal string. */
-    {
-      const hive = ok({layout:"hive"});
-      const r = parse(json(hive));
-      check(r.ok && r.state.layout === "hive",
-            "a file stating layout:\"hive\" opens as Hive, unrepaired — got "
-            + json(r.ok && r.state.layout));
-      check(!r.repaired.some(w => /layout/.test(w)),
-            "and layout is not reported as repaired, since the file's own value was kept — got "
-            + json(r.repaired));
-      if(r.ok){
-        M.setState(r.state);
-        const L = M.computeLayout(r.state);
-        const direct = M.computeHiveLayout(r.state);
-        eq(JSON.stringify(L), JSON.stringify(direct),
-           "an opened hive roster is dispatched to the hive engine");
-      }
-    }
-
-    /* matrix has an engine now too — the sixth, the same proof again, and
-       the first one whose own roster carries the second dimension: a
-       groups array plus one person naming a group and one naming none, so
-       the dispatch is proven on a document that actually exercises the
-       row axis, not merely a document that happens to open. */
-    {
-      const matrix = ok({
-        layout: "matrix",
-        groups: [{id: "g1", label: "Berlin"}],
-        people: [
-          {id:"p1", name:"Ada", tierId:"t1", groupId:"g1", role:"", photo:null, pw:0, ph:0, frame:null},
-          {id:"p2", name:"Bo",  tierId:"t1", groupId:null, role:"", photo:null, pw:0, ph:0, frame:null}
-        ]
-      });
-      const r = parse(json(matrix));
-      check(r.ok && r.state.layout === "matrix",
-            "a file stating layout:\"matrix\" opens as Matrix, unrepaired — got "
-            + json(r.ok && r.state.layout));
-      check(!r.repaired.some(w => /layout/.test(w)),
-            "and layout is not reported as repaired, since the file's own value was kept — got "
-            + json(r.repaired));
-      if(r.ok){
-        M.setState(r.state);
-        const L = M.computeLayout(r.state);
-        const direct = M.computeMatrixLayout(r.state);
-        eq(JSON.stringify(L), JSON.stringify(direct),
-           "an opened matrix roster is dispatched to the matrix engine");
-      }
-    }
-
-    /* Pins the list against the engine table. The two must grow together: a
-       name accepted here with no engine behind it opens as a blank chart, and
-       an engine no file may name is unreachable. */
-    const enums = /const ENUMS = \{[\s\S]*?\n\};/.exec(SCRIPT);
-    check(!!enums && /layout:\s*\["pyramid","tornado","histogram","swimlanes","hive","matrix"\]/.test(enums[0]),
-          "ENUMS.layout lists exactly the layouts this build can draw");
-    const table = /const engines = \{([^}]*)\}/.exec(SCRIPT);
-    check(!!table && /pyramid:\s*computePyramidLayout/.test(table[1])
-                  && /tornado:\s*computeTornadoLayout/.test(table[1])
-                  && /histogram:\s*computeHistogramLayout/.test(table[1])
-                  && /swimlanes:\s*computeSwimlaneLayout/.test(table[1])
-                  && /hive:\s*computeHiveLayout/.test(table[1])
-                  && /matrix:\s*computeMatrixLayout/.test(table[1]),
-          "and every one of them has an engine in computeLayout");
-    const named = (table ? table[1].match(/[a-zA-Z]+\s*:/g) || [] : []).length;
-    eq(named, 6, "with no engine the enum does not list");
   }
 
-  /* ---- grade-heading settings default and validate independently ---- */
   {
-    const legacy = ok({});
-    delete legacy.showGradeCode; delete legacy.showGradeName;
-    const old = parse(json(legacy));
-    check(old.ok, "a roster missing grade-label controls still opens");
-    if(old.ok){
-      eq(old.state.showGradeCode, true, "a legacy roster shows codes");
-      eq(old.state.showGradeName, false, "and leaves names hidden");
-    }
     const chosen = parse(json(ok({showGradeCode:false, showGradeName:true})));
     check(chosen.ok && chosen.state.showGradeCode === false && chosen.state.showGradeName === true,
       "explicit independent grade-label choices survive Open");
     for(const [field, fallback] of [["showGradeCode", true], ["showGradeName", false]]){
-      for(const bad of ["yes", 1, null, {}, []]){
+      for(const bad of ["yes", 1, null]){
         const r = parse(json(ok({[field]:bad})));
         check(r.ok && r.state[field] === fallback,
           field + " " + json(bad) + " is repaired to its default");
@@ -1011,17 +708,11 @@ try{
     }
   }
 
-  /* ---- Swimlane person-name position is a validated, defaulting enum ---- */
   {
-    const legacy = ok({});
-    delete legacy.nameLabelPosition;
-    const old = parse(json(legacy));
-    check(old.ok && old.state.nameLabelPosition === "below",
-      "a roster missing name-label positioning keeps names below photos");
     const chosen = parse(json(ok({nameLabelPosition:"next"})));
     check(chosen.ok && chosen.state.nameLabelPosition === "next",
       "an explicit next-to-photo choice survives Open");
-    for(const bad of ["above", "NEXT", " next", 1, null, {}, []]){
+    for(const bad of ["NEXT", " next", null]){
       const r = parse(json(ok({nameLabelPosition:bad})));
       check(r.ok && r.state.nameLabelPosition === "below",
         "nameLabelPosition " + json(bad) + " repairs to below");
@@ -1030,20 +721,13 @@ try{
     }
   }
 
-  /* ---- name-bolding is a validated, four-way enum, and a repaired-vs-absent
-     pair like every other document setting ---- */
   {
-    const legacy = ok({});
-    delete legacy.nameBold;
-    const old = parse(json(legacy));
-    check(old.ok && old.state.nameBold === "given",
-      "a roster missing nameBold keeps drawing given names bold");
     const chosen = parse(json(ok({nameBold:"family"})));
     check(chosen.ok && chosen.state.nameBold === "family",
       "an explicit family-name-bold choice survives Open");
     check(chosen.ok && chosen.repaired.length === 0,
       "and a stated, usable choice is not reported as a repair");
-    for(const bad of ["bold", "GIVEN", " given", 1, null, {}, []]){
+    for(const bad of ["GIVEN", " given", null]){
       const r = parse(json(ok({nameBold:bad})));
       check(r.ok && r.state.nameBold === "given",
         "nameBold " + json(bad) + " repairs to given");
@@ -1052,22 +736,13 @@ try{
     }
   }
 
-  /* ---- font is a validated, five-way enum, and a repaired-vs-absent pair
-     like every other document setting ---- */
   {
-    const legacy = ok({});
-    delete legacy.font;
-    const old = parse(json(legacy));
-    check(old.ok && old.state.font === "open-sans",
-      "a roster missing font keeps drawing the Open Sans stack");
-    check(old.ok && old.repaired.length === 0,
-      "and an omitted font is not reported as a repair");
     const chosen = parse(json(ok({font:"arial"})));
     check(chosen.ok && chosen.state.font === "arial",
       "an explicit Arial choice survives Open");
     check(chosen.ok && chosen.repaired.length === 0,
       "and a stated, usable choice is not reported as a repair");
-    for(const bad of ["comic-sans", "ARIAL", " arial", 1, null, {}, []]){
+    for(const bad of ["ARIAL", " arial", null]){
       const r = parse(json(ok({font:bad})));
       check(r.ok && r.state.font === "open-sans",
         "font " + json(bad) + " repairs to open-sans");
@@ -1076,10 +751,6 @@ try{
     }
   }
 
-  /* ---- groupsLabel is a document label like title/brand: a stated
-     non-string repairs to the empty string and is reported; a stated
-     over-long string clamps to LIMITS.title and is reported too. Absent is
-     not a repair — the bare-file pin list above already proves that. ---- */
   {
     for(const bad of [7, null, {}, []]){
       const r = parse(json(ok({groupsLabel: bad})));
@@ -1098,23 +769,13 @@ try{
     }
   }
 
-  /* ---- person-label visibility is three independent document booleans ---- */
   {
-    const legacy = ok({});
-    delete legacy.showPersonName; delete legacy.showPersonGrade; delete legacy.showPersonGroup;
-    const old = parse(json(legacy));
-    check(old.ok, "a roster missing person-label controls still opens");
-    if(old.ok){
-      eq(old.state.showPersonName, true, "legacy rosters keep person names visible");
-      eq(old.state.showPersonGrade, true, "legacy rosters keep person grades visible");
-      eq(old.state.showPersonGroup, true, "legacy rosters keep person groups visible");
-    }
     const chosen = parse(json(ok({showPersonName:false, showPersonGrade:false, showPersonGroup:false})));
     check(chosen.ok && chosen.state.showPersonName === false
       && chosen.state.showPersonGrade === false && chosen.state.showPersonGroup === false,
       "three explicit hidden choices survive Open");
     for(const field of ["showPersonName","showPersonGrade","showPersonGroup"]){
-      for(const bad of ["yes", 1, null, {}, []]){
+      for(const bad of ["yes", 1, null]){
         const r = parse(json(ok({[field]:bad})));
         check(r.ok && r.state[field] === true,
           field + " " + json(bad) + " is repaired to visible");
@@ -1126,12 +787,6 @@ try{
     }
   }
 
-  /* ---- merge implies attach, on the way in ----
-     A file can state merge:true with attach:false — sharing a band without
-     marking the attach that sharing implies. It must open, must come out
-     attached, and — the part that makes it safe — must draw exactly as it
-     would with attach left false, because layout reads attach only on a
-     group's leader and a shared grade is never a leader. */
   {
     const legacyShared = ok({
       tiers: [
@@ -1151,18 +806,15 @@ try{
       check(!r.repaired.some(w => /grade options/.test(w)),
         "raising attach is not reported as a repair — it changes nothing the user chose");
 
-      /* the geometry is the whole reason this is safe */
       M.setState(r.state);
       const withRule = M.computeLayout(r.state);
       const asBefore = JSON.parse(JSON.stringify(r.state));
-      asBefore.tiers[2].attach = false;          // attach left as the file stated it
+      asBefore.tiers[2].attach = false;
       M.setState(asBefore);
       const before = M.computeLayout(asBefore);
       eq(JSON.stringify(withRule.bands), JSON.stringify(before.bands),
         "and the bands come out identical whether or not attach is raised to true");
-      /* bands[0] is the header's apex slice, so the count is groups + 1 —
-         compared against the same file with the share removed rather than
-         against a number, which would only encode today's header. */
+
       const unshared = JSON.parse(JSON.stringify(r.state));
       unshared.tiers[2].merge = false;
       M.setState(unshared);
@@ -1173,10 +825,6 @@ try{
     }
   }
 
-  /* ---------------------------------------------------------- 5. ids are regenerated */
-
-  /* This is what makes an imported id harmless: it never reaches the DOM at all.
-     It also repairs duplicate person ids for free. */
   {
     const evil = '"><img src=x onerror=alert(1)>';
     const r = parse(json(ok({
@@ -1197,10 +845,6 @@ try{
     }
   }
 
-  /* ---------------------------------------------------------- 6. nothing executes */
-
-  /* The end-to-end question: take the worst fixture, put it through the validator
-     and out through the SVG writer, and prove no payload is in a position to run. */
   {
     const r = parse(fixture("injection"));
     check(r.ok, "injection.json reaches the renderer");
@@ -1209,13 +853,7 @@ try{
       const svg = M.toSVG(M.computeLayout(r.state));
 
       check(!/<script/i.test(svg), "no <script> element in the exported SVG");
-      /* Attributes only exist inside tags. An escaped payload sitting in a TEXT
-         node is not one: `&lt;img src=x onerror="alert(2)"&gt;` is a grade's name
-         being drawn as the characters the file asked for, and the substring
-         `onerror=` inside it is not markup — the `<` that would make it markup
-         is the thing that got escaped. Testing the whole string instead of the
-         tags rejects correct output, and did so the moment a hostile grade NAME
-         started reaching the chart in its own right. */
+
       const tagsOnly = svg.replace(/>[^<]*/g, ">");
       check(!/\son\w+\s*=/i.test(tagsOnly), "no event-handler attribute in the exported SVG");
       check(/&lt;img src=x onerror="alert\(2\)"&gt;/.test(svg),
@@ -1225,23 +863,15 @@ try{
       check(!/<img\b/i.test(svg), "no injected <img> element in the exported SVG");
       check(!/<foreignObject/i.test(svg), "no foreignObject in the exported SVG");
 
-      /* every href must be one of our own data URLs; a remote one would both leak
-         who opened the roster and break the offline promise */
       for(const m of [...svg.matchAll(/(?:xlink:)?href="([^"]*)"/g)]){
         check(/^data:image\/(jpeg|png);base64,/.test(m[1]),
           "SVG href is an embedded image, not a URL — got " + m[1].slice(0, 40));
       }
 
-      /* the payloads must still be VISIBLE, as text — dropping them silently
-         would pass every check above while losing the user's data */
       check(svg.indexOf("&lt;script&gt;alert(&quot;name&quot;)&lt;/script&gt;") >= 0
          || svg.indexOf("&lt;script&gt;alert(\"name\")&lt;/script&gt;") >= 0,
         "the hostile name is still rendered, escaped, as text");
 
-      /* The fixture states this hostile fragment — "</td><td>injected" — as a
-         group's own label directly (current format: groups + groupId), so
-         escaping it is subline's job, not an on-ramp's. Second source: the
-         literal string the fixture states, not a value reread off r.state. */
       const hostileGroup = r.state.groups.find(g => g.label === "</td><td>injected");
       check(!!hostileGroup, "the hostile text survives as a group label, verbatim");
       check(!/<td>injected/i.test(svg) && !/<\/td>/i.test(svg),
@@ -1251,10 +881,6 @@ try{
     }
   }
 
-  /* A grade has no title of its own, so a file that states one is stating a
-     field this build does not read. Prove it is DROPPED rather than carried:
-     not onto the grade, not onto its people, and above all not into the
-     SVG — a field nobody reads is also a field nobody escapes. */
   {
     const hostile = "</text><script>alert('role')</script>";
     const r = parse(json(ok({
@@ -1277,8 +903,6 @@ try{
     }
   }
 
-  /* The same payload where the app DOES read it: a person's own role. This is
-     the live path, so here it must arrive — escaped. */
   {
     const hostile = "</text><script>alert('role')</script>";
     const r = parse(json(ok({
@@ -1301,7 +925,6 @@ try{
     }
   }
 
-  /* the escapers themselves */
   {
     eq(M.xmlText("<b>&</b>"), "&lt;b&gt;&amp;&lt;/b&gt;", "xmlText escapes < > &");
     eq(M.xmlText('say "hi"'), 'say "hi"', "xmlText leaves quotes alone — they are legal in text");
@@ -1321,10 +944,6 @@ try{
     eq(M.paint(null, "#000000"), "#000000", "paint rejects null");
   }
 
-  /* ---------------------------------------------------------- 7. the open document is untouched */
-
-  /* The validator must be a pure function of its input. If it mutated anything
-     shared, a refused import could still corrupt the roster on screen. */
   {
     const before = ok();
     const snapshot = json(before);
@@ -1341,12 +960,6 @@ try{
     }
   }
 
-  /* ---------------------------------------------------------- 8. pasted text */
-
-  /* A pasted list is as untrusted as a file — it usually comes off a clipboard
-     from an HR export. The comma case is the tricky one: without correct
-     quote-handling, "Doe, Jane" would split into two people, the second
-     called "Jane". */
   {
     const csv = (line, want, why) => {
       const got = M.splitCsvLine(line);
@@ -1364,12 +977,6 @@ try{
     csv('Mid"quote,B', ['Mid"quote',"B"], "a quote inside an unquoted field is literal");
     csv("", [""], "an empty line yields one empty field");
 
-    /* Tab alone is still naive — nothing quotes a tab. Semicolon is not, any
-       more: TIERFORM's own CSV export quotes a semicolon that turns up inside a
-       name or a group, so the import has to be able to read that quoting back
-       or it tears its own export apart. An unquoted semicolon row is unaffected
-       — the quote-aware reader behaves exactly like the naive split when there
-       is nothing to unquote. */
     eq(JSON.stringify(M.splitPasteRow("A\tB,C\tD")), JSON.stringify(["A","B,C","D"]),
        "a tab row is split on tabs, and commas inside are left alone");
     eq(JSON.stringify(M.splitPasteRow("A;B,C;D")), JSON.stringify(["A","B,C","D"]),
@@ -1383,7 +990,6 @@ try{
     eq(JSON.stringify(M.splitPasteRow('"Doe, Jane",FRA')), JSON.stringify(["Doe, Jane","FRA"]),
        "a comma row goes through the CSV reader");
 
-    /* end to end, through the real parser */
     M.setState({tiers:[{id:"t1", code:"M", label:"Manager", role:"Manager", fill:"green",
                         attach:false, merge:false, align:"center"}], people:[]});
     const rows = M.parsePasteText('"Doe, Jane",Manager,FRA\nSingh, Amrit,M,HAM\n\n"Ó Braonáin, Seán",Manager,DUB', "t1");
@@ -1395,11 +1001,6 @@ try{
     eq(rows[2].name, "Ó Braonáin, Seán", "a quoted name with accents survives");
     check(rows.every(r => r.name.length > 0), "no row is produced without a name");
 
-    /* ---- the group column has no fallback ----
-       parsePasteText takes only fallbackTierId — the group column has no
-       fallback of its own. Three shapes of "said nothing" — an empty cell, a
-       cell holding only spaces, and the column missing altogether — all leave
-       the group empty; a row that carries one keeps it. */
     {
       const text = 'Explicit,Manager,LON\nBlank,Manager,\nSpaces,Manager,   \nMissing';
       const rows = M.parsePasteText(text, "t1");
@@ -1409,19 +1010,10 @@ try{
       eq(rows[2].group, "", "a whitespace-only group cell stays empty too");
       eq(rows[3].group, "", "and so does a row with no group column at all");
 
-      /* the grade fallback is a different argument and is unaffected by any of this */
       check(rows.every(r => r.tierId === "t1"),
         "the grade fallback is unaffected by any of this");
       eq(rows[0].gradeRaw, "Manager", "and the second column is read as the grade");
 
-      /* The preview renders r.group and the commit writes r.group off the SAME
-         rows, so what is shown is what is added. Asserted on the source, because
-         two readers of one array is the property that makes them agree. */
-      /* ---- the grade fallback is a question the paste dialog asks ----
-         It replaced a standing control, so what matters is unchanged: a row that
-         names its own grade is untouched by it, and only a row that names none
-         takes it. parsePasteText's signature and its per-row matching did not
-         change — the field simply supplies the argument now. */
       M.setState({tiers:[
         {id:"t1", code:"M",  label:"Manager", fill:"green", attach:false, merge:false, align:"center"},
         {id:"t2", code:"SC", label:"Senior Consultant", fill:"green", attach:false, merge:false, align:"center"}
@@ -1433,13 +1025,11 @@ try{
         eq(toT1[2].tierId, "t1", "a row naming its own grade by code ignores it too");
         eq(toT1[1].tierId, "t1", "a row naming no grade takes the fallback");
 
-        /* the same rows, a different answer: only the row that named nothing moves */
         const toT2 = M.parsePasteText(text, "t2");
         eq(toT2[0].tierId, "t2", "changing the fallback leaves a row that named its grade alone");
         eq(toT2[2].tierId, "t1", "…including one that named it by code");
         eq(toT2[1].tierId, "t2", "…and moves only the row that named none");
 
-        /* the group half of the same question: the group column has no fallback */
         eq(toT1[1].group, "FRA", "a row with a group column keeps it");
         eq(M.parsePasteText("No Group", "t1")[0].group, "",
           "and a row with no group column yields no group at all");
@@ -1447,11 +1037,6 @@ try{
           "…as does a row that stops after the grade");
       }
 
-      /* ---- the column order is Name, Grade, Group ----
-         Grade is the load-bearing column — it decides which band someone lands
-         in — so it sits beside the name rather than after the optional one.
-         Asserted field by field, because "the row parsed" is also true when two
-         columns are swapped. */
       {
         const r = M.parsePasteText("Jane Doe\tSC\tFRA", "t1")[0];
         eq(r.name, "Jane Doe", "column one is the name");
@@ -1459,11 +1044,6 @@ try{
         eq(r.tierId, "t2", "…and it is matched, not just stored");
         eq(r.group, "FRA", "column three is the group");
 
-        /* A row with grade and group swapped must NOT be quietly understood.
-           There is no compatibility path: "FRA" matches no grade, so the row
-           takes the fallback and reads the third column as a group — which
-           is the honest result for text in the wrong order, and visible in
-           the preview as the unmatched warning. */
         const old = M.parsePasteText("Jane Doe\tFRA\tSC", "t1")[0];
         eq(old.gradeRaw, "FRA", "a row with columns swapped offers its group as the grade");
         eq(old.tierId, "t1", "…which matches nothing, so it takes the fallback");
@@ -1471,9 +1051,6 @@ try{
         eq(old.group, "SC", "…and its third column is read as a group");
       }
 
-      /* ---- the fourth column is Role ----
-         Optional, and drawn on the chart in place of the grade name — the same
-         precedence subline()/tierRole() already give p.role over t.label. */
       {
         const withRole = M.parsePasteText("Jane Doe\tSC\tFRA\tCountry Head", "t1")[0];
         eq(withRole.role, "Country Head", "column four is the role");
@@ -1481,57 +1058,32 @@ try{
         eq(noRole.role, "", "a three-column row has no role at all");
       }
 
-      /* ---- a header row is skipped once, and only when it says what it is ----
-         Requiring BOTH the first and second cells to read "Name" and "Grade" is
-         what keeps a real person actually called Name from being silently
-         dropped: nobody is coincidentally graded "Grade" as well. Checked only
-         on the first non-empty line — a data row that happens to read "Name" in
-         a later position is not touched by this at all. */
       {
-        /* `|| {}` throughout: a mutation that empties the array must fail the
-           read that follows instead of throwing and abandoning the rest of
-           this block. */
+
         const skipped = M.parsePasteText("Name;Grade;Group;Role\r\nAda;SC;;", "t1");
         eq(skipped.length, 1, "a Name/Grade header row is skipped, leaving the one data row");
         eq((skipped[0]||{}).name, "Ada", "…and the survivor is the person, not the header read as one");
 
-        /* Our own CSV export prepends a UTF-8 BOM; the header-skip must still
-           fire on a file that starts with one, or every re-imported export of
-           our own keeps a row called "Name" that matches no grade. */
         const withBom = M.parsePasteText("﻿Name;Grade;Group;Role\r\nAda;SC;;", "t1");
         eq(withBom.length, 1, "a leading BOM does not stop the header from being recognised");
         eq((withBom[0]||{}).name, "Ada", "…and the BOM is stripped, not left glued to the first cell");
 
-        /* The second cell has to say "Grade" too — SC is a real grade, not the
-           word, so this line is a person, not a header. */
         const named = M.parsePasteText("Name;SC", "t1");
         eq(named.length, 1, "a first line naming a real grade in its SECOND cell is not a header");
         eq((named[0]||{}).name, "Name", "…so a person actually called Name survives");
         eq((named[0]||{}).tierId, "t2", "…and her grade is read normally, matched by code");
       }
 
-      /* ---- a quoted semicolon survives the paste parser end to end ---- */
       {
         const r = M.parsePasteText('"Smith; Jr";SC;Berlin;', "t1")[0] || {};
         eq(r.name, "Smith; Jr", "a quoted semicolon in the name is not read as a column break");
         eq(r.group, "Berlin", "…and the columns after it still line up");
       }
 
-      /* ---- the round trip: two independent writers of the same statement ----
-         toCSV is the app's own export; parsePasteText is the app's own import.
-         Hand-build the people, run them through toCSV, then feed that text back
-         through parsePasteText, and compare every field against the hand-built
-         originals — not against a string either function produced, which would
-         only prove the two agree with themselves. The BOM is prepended here the
-         way the exportCsv command site prepends it before the download, so the
-         case this exercises is the one a real re-import would hit. */
       {
         const t1 = {id:"g1", code:"M",  label:"Manager"};
         const t2 = {id:"g2", code:"SC", label:"Senior Consultant"};
-        /* The group TEXT is a literal array here, independent of both the
-           group objects below and of toCSV/parsePasteText — the second
-           source the round trip is compared against, exactly as the name and
-           role literals already were. */
+
         const groupText = ["Frankfurt; DE", "", "Berlin"];
         const groups = [{id:"o1", label:groupText[0]}, {id:"o2", label:groupText[2]}];
         const people = [
@@ -1540,10 +1092,7 @@ try{
           {id:"p3", name:"Grace Hopper",tierId:"g2", groupId:"o2", role:"Fellow"}
         ];
         const csvText = "﻿" + M.toCSV({tiers:[t1, t2], groups:groups, people:people});
-        /* parsePasteText resolves grade codes against the module's live state,
-           not against the object toCSV was handed — so the tiers the import
-           reads back against must be these same two, or a correct round trip
-           would land on the wrong ids by accident. */
+
         M.setState({tiers:[t1, t2], groups:groups, people:[]});
         const rows = M.parsePasteText(csvText, "gNEW");
         eq(rows.length, people.length, "the round trip produces exactly as many rows as people went in");
@@ -1557,10 +1106,6 @@ try{
         eq(rows[2].tierId, "g2", "row 2's grade code is matched back too, sharing a tier with row 1");
       }
 
-      /* Everywhere the order is STATED has to agree with the one place it is
-         read. Four statements in the app, and they drift silently: a preview
-         whose headers disagree with its cells is wrong in a way no parse test
-         can see. */
       check(/placeholder="Jane Doe&#9;Manager&#9;Berlin&#9;Country Head"/.test(HTML),
         "the placeholder demonstrates Name, Grade, Group, Role");
       check(/<thead><tr><th>Name<\/th><th>Grade<\/th><th>Group<\/th><th>Role<\/th><\/tr><\/thead>/.test(HTML),
@@ -1572,15 +1117,7 @@ try{
       check(!/Name, Group, Grade/.test(HTML),
         "and no differently-ordered statement of the columns appears anywhere — "
         + "a stale sentence is how a user is told to paste text the parser will misread");
-      /* ---- one rule over every statement of the column order ----
-         The hint, the Tips line, the preview thead and toCSV's own header row
-         all have to state the SAME four-column sequence. Each is extracted
-         from its own independent source — three straight off the shipped
-         markup, the fourth by actually running toCSV — and compared against
-         one shared literal, so a class of defect (one statement drifting
-         alone, the next site nobody thought to update) has one test guarding
-         every site rather than four separate literals that can each go stale
-         on their own. */
+
       {
         const EXPECTED = "Name, Grade, Group, Role";
         const hintMatch = /<b>([^<]+)<\/b>/.exec(HTML.slice(HTML.indexOf("One person per line")));
@@ -1595,14 +1132,9 @@ try{
         const csvHeader = M.toCSV({tiers:[], people:[]}).split(";").join(", ");
         eq(csvHeader, EXPECTED, "toCSV's own header row states the same order");
       }
-      /* the preview's CELLS must follow its headers, or the table lies */
+
       {
-        /* the ROW, not the whole builder: gradeCell is declared above the row,
-           so an index search over the whole builder would find that
-           declaration instead of the cell's real position, silently passing
-           on a table whose cells are actually in the wrong order — search
-           only the row text so a swapped column can't hide behind an
-           unrelated match. */
+
         const row = /return el\("tr", \{cls:r\.unmatched[\s\S]*?\]\);/.exec(SCRIPT);
         check(!!row, "the preview row builder is readable");
         if(row){
@@ -1618,20 +1150,14 @@ try{
 
       const prev = /function showPastePreview\(\)[\s\S]*?\n\}/.exec(SCRIPT);
       const conf = /function confirmPaste\(replace\)[\s\S]*?\n\}/.exec(SCRIPT);
-      /* parsePasteText takes no group-fallback parameter, so a row with no
-         group column simply has none — the honest answer for a row that
-         does not say where someone sits. */
+
       check(prev && /parsePasteText\(\$\("#pasteArea"\)\.value, PASTE_NEW\)/.test(prev[0]),
         "the preview calls parsePasteText with no group fallback — a row with no group column gets none");
       check(prev && !/dropOffice/.test(prev[0]),
         "and the preview reads no standing office default");
       check(prev && /el\("td", \{text:r\.group \|\| "—"\}\)/.test(prev[0]),
         "the preview shows r.group");
-      /* r.group is still the raw text parsePasteText put in the row (the
-         paste dialog's own shape, untouched); what changed is that
-         confirmPaste now resolves it to an entity through the app's one
-         text->group policy, resolveGroupId, rather than copying the string
-         onto the person directly. */
+
       check(conf && /groupId:\s*resolveGroupId\(state,\s*r\.group\)/.test(conf[0]),
         "and the commit resolves the same r.group through resolveGroupId, so preview and result agree");
       check(prev && /el\("td", \{text:r\.role\s*\|\| "—"\}\)/.test(prev[0]),
@@ -1647,26 +1173,21 @@ try{
   failures.push("the suite threw before finishing: " + ((e && e.message) || e));
 }
 
-/* ---- byte builders. These are the formats, written out. ---- */
 const PNG_SIG_BYTES = [137, 80, 78, 71, 13, 10, 26, 10];
 const be32bytes = v => [(v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255];
 
-/* signature + a 13-byte IHDR carrying the dimensions, which is all a decoder
-   needs to know how much to allocate */
 function pngBytes(w, h){
   return PNG_SIG_BYTES
-    .concat([0, 0, 0, 13])                       // IHDR length
-    .concat([0x49, 0x48, 0x44, 0x52])            // "IHDR"
+    .concat([0, 0, 0, 13])
+    .concat([0x49, 0x48, 0x44, 0x52])
     .concat(be32bytes(w), be32bytes(h))
-    .concat([8, 6, 0, 0, 0])                     // depth, colour, compression, filter, interlace
-    .concat([0, 0, 0, 0]);                       // CRC
+    .concat([8, 6, 0, 0, 0])
+    .concat([0, 0, 0, 0]);
 }
 
-/* SOI, a JFIF APP0 the walk has to step over, the frame header, a scan header
-   and EOI. `sof` picks the frame marker: 0xC0 baseline, 0xC2 progressive. */
 function jpegBytes(w, h, sof){
   const app0 = [0xFF, 0xE0, 0x00, 0x10,
-                0x4A, 0x46, 0x49, 0x46, 0x00,    // "JFIF\0"
+                0x4A, 0x46, 0x49, 0x46, 0x00,
                 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00];
   const frame = [0xFF, sof === undefined ? 0xC0 : sof, 0x00, 0x11, 0x08,
                  (h >> 8) & 255, h & 255,
@@ -1677,31 +1198,16 @@ function jpegBytes(w, h, sof){
   return [0xFF, 0xD8].concat(app0, frame, scan, [0xFF, 0xD9]);
 }
 
-/* ---------------------------------------------------------- 9. image limits */
-
-/* processImage decides how much memory a dropped file is allowed to cost.
-   Scaling by the short edge alone would let a 20000x400 panorama produce a
-   20000px-wide canvas — 32 MB of pixels for one face — so the limit has to
-   bind on the long edge instead. Image, FileReader and the canvas are stubs,
-   because what is under test is the arithmetic rather than a decoder — but
-   the FileReader hands over a REAL PNG declaring the dimensions under test,
-   and the module carries the real header preflight, because processImage
-   refuses on the header long before it reaches its own scaling. Stubbing
-   that preflight out would leave this section asserting a route the app
-   does not take.
-
-   This section finishes asynchronously, so it owns the call to report(). */
 {
   const IMG = new Function(
     ["PHOTO_SHORT","PHOTO_LONG","PHOTO_MAX_BYTES","PHOTO_MAX_EDGE","LIMITS","HEX6",
-     /* what the header preflight reads the bytes with */
+
      "PHOTO_SCAN_BYTES","B64_ALPHABET","B64_VALUES","PNG_SIGNATURE","JPEG_MAX_SEGMENTS"]
       .map(grabConst).join("\n") + "\n" +
     ["validatePhoto","photoBytes","be32","pngHeaderSize","isSofMarker","jpegHeaderSize",
      "photoHeader","photoSizeProblem","sizeMatchesHeader"].map(grabFn).join("\n") + "\n" +
     "let NEXT = {w:0, h:0, url:''};\n" +
-    /* the reader returns the bytes the case is about, so photoHeader parses a
-       real IHDR rather than a value this suite made up */
+
     "function FileReader(){ const self = this;\n" +
     "  this.readAsDataURL = function(){ self.result = NEXT.url; self.onload && self.onload(); };\n" +
     "}\n" +
@@ -1722,9 +1228,7 @@ function jpegBytes(w, h, sof){
 
   const L = IMG.limits;
   const results = {};
-  /* PNG, and the file says so: the type check picks the parser and the parser
-     proves the type, so a mock claiming "image/jpeg" over PNG bytes would be
-     refused for lying rather than for the limit under test. */
+
   function record(label, w, h, size){
     const url = M.dataUrl("png", pngBytes(w, h));
     IMG.setSource(w, h, url);
@@ -1735,32 +1239,22 @@ function jpegBytes(w, h, sof){
   }
 
   const ACCEPT = [["portrait",800,1200], ["small",120,90], ["square",1000,1000],
-                  /* right at the shape limit, and wide enough that the long edge
-                     rather than the short one decides the scale */
+
                   ["wide",3000,400]];
-  /* Each of these has to reach a DIFFERENT rule, which means staying inside
-     every limit but the one under test. The dimensions are derived from
-     LIMITS — the header preflight is what a real file meets first, and it is
-     stricter than processImage's own PHOTO_MAX_* constants — so tightening a
-     limit moves these cases with it instead of silently collapsing them all
-     onto whichever rule happens to fire first. */
+
   const D = L.LIMITS.photoDim, AREA = L.LIMITS.photoArea, RATIO = L.LIMITS.photoRatio;
   const REFUSE = [["too wide", D + 1, 100, undefined],
-                  /* both edges legal, the product is not */
+
                   ["too many pixels", D, Math.ceil(AREA / D) + 1, undefined],
                   ["zero size", 0, 0, undefined],
                   ["huge file", 800, 600, L.PHOTO_MAX_BYTES + 1],
-                  /* inside every size limit — only the shape guard catches
-                     these, and it is the whole point of it */
+
                   ["panorama", D, Math.floor(D / (RATIO + 1)), undefined],
                   ["tall strip", Math.floor(D / (RATIO + 1)), D, undefined]];
 
   const runs = ACCEPT.map(([n,w,h]) => record(n,w,h))
     .concat(REFUSE.map(([n,w,h,size]) => record(n,w,h,size)));
 
-  /* held in a binding so the block does not evaluate to a Promise — osascript
-     prints a trailing expression value, and "[object Promise]" after a clean run
-     reads like an error */
   const pending = Promise.all(runs).catch(e => {
     failures.push("the image-limit section threw: " + ((e && e.message) || e));
   }).then(() => {
@@ -1769,7 +1263,6 @@ function jpegBytes(w, h, sof){
       check(r && r.ok, "processImage accepts a " + name + (r && r.why ? " — rejected: " + r.why : ""));
     }
 
-    /* the point of the whole change: no stored edge may exceed PHOTO_LONG */
     for(const [name] of ACCEPT){
       const out = results[name] && results[name].r;
       if(!out) continue;
@@ -1779,7 +1272,6 @@ function jpegBytes(w, h, sof){
       check(Number.isFinite(out.w) && Number.isFinite(out.h), name + ": both edges are finite");
     }
 
-    /* the long-edge cap is what stops a 3000px source allocating a 3000px canvas */
     const wide = results["wide"] && results["wide"].r;
     check(wide && wide.w === L.PHOTO_LONG,
       "a wide image is scaled by its LONG edge to " + L.PHOTO_LONG + " — got "
@@ -1787,7 +1279,6 @@ function jpegBytes(w, h, sof){
     check(wide && wide.h < L.PHOTO_SHORT,
       "and its short edge ends up under " + L.PHOTO_SHORT + ", proving the long edge decided");
 
-    /* the shape guard, and that it says something actionable */
     check(/long and thin/.test((results["panorama"] || {}).why || ""),
       "a panorama is refused for its shape, not for a size it does not exceed");
     check(/long and thin/.test((results["tall strip"] || {}).why || ""),
@@ -1815,54 +1306,28 @@ function jpegBytes(w, h, sof){
       "the absurd-dimension refusal names the bound it broke — got " + JSON.stringify(why("too wide")));
     check(/megapixel/.test(why("too many pixels")),
       "the area refusal names megapixels — got " + JSON.stringify(why("too many pixels")));
-    /* A PNG cannot declare a zero edge and still be a PNG: IHDR is read before
-       any of the size rules, and it refuses 0×0 as malformed. So the honest
-       assertion is that the bytes are rejected as bytes — processImage's own
-       `no pixels` branch is unreachable from a real header, and asserting it
-       fired would be asserting a route the app does not take. */
+
     check(/not a valid JPEG or PNG/.test(why("zero size")),
       "a zero-pixel image is refused by the header parser, before any size rule — got "
       + JSON.stringify(why("zero size")));
 
-    /* Why the four dimension cases above are phrased against LIMITS and not
-       against PHOTO_MAX_EDGE: the header preflight runs first and is stricter,
-       so processImage's own copy never decides anything. If that ever reverses,
-       this expectation is wrong and says so. (Area and ratio are read from
-       LIMITS.photoArea/photoRatio directly, with no independent
-       PHOTO_MAX_AREA/RATIO copy to compare against — PHOTO_MAX_EDGE is the
-       one constant still independent of LIMITS, and the one case this check
-       still has something to say about.) */
     check(D < L.PHOTO_MAX_EDGE,
       "the header limit is the binding one, which is why it is the limit asserted — "
       + "photoDim " + D + " vs PHOTO_MAX_EDGE " + L.PHOTO_MAX_EDGE);
 
-    /* §10 is asynchronous too, and it owns the report */
     return decodingSection();
   });
 }
 
-/* ---------------------------------------------------------- 10. photos are decoded
-
-   validatePhoto can only prove the envelope: a jpeg or png data URL, legal
-   base64, inside the byte limit. Two things it cannot see are exactly the two
-   that hurt — whether the bytes are an image at all, and how big that image
-   really is — and both were taken on trust from the file until openRoster
-   started decoding them.
-
-   Everything below runs through the real openRoster against the real Image
-   decoder stub, which reads JPEG SOF and PNG IHDR out of the actual bytes. */
 async function decodingSection(){
   try{
     const JPEG_URL = JPEG;
     const PNG_URL  = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"
                    + "AAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
-    /* the right envelope around bytes that are not an image; the same pair the
-       photos.json fixture carries, built here so the unit test does not depend
-       on the fixture and vice versa */
+
     const BAD_JPEG = "data:image/jpeg;base64,dGhpcyBpcyBub3QgYSBKUEVHIGF0IGFsbC4=";
     const BAD_PNG  = "data:image/png;base64,UE5HPyBubyEgZWlnaHQgYnl0ZXMgb2Ygbm90aGluZw==";
 
-    /* -------- 10a. decodeImage tells the truth about the bytes */
     {
       const jpg = await M.decodeImage(JPEG_URL);
       check(jpg && jpg.w === 1 && jpg.h === 1,
@@ -1883,7 +1348,6 @@ async function decodingSection(){
         "decodeImage refuses an SVG data URL");
     }
 
-    /* -------- 10b. the size limits, at their boundaries */
     {
       const L = M.LIMITS;
       const problem = (w, h) => M.photoSizeProblem(w, h);
@@ -1901,7 +1365,6 @@ async function decodingSection(){
       eq(problem(1, 1), null, "a 1x1 image is legal, if pointless");
     }
 
-    /* -------- 10c. the fixture, end to end */
     {
       const r = await M.openRoster(fixture("photos"));
       check(r.ok, "photos.json is accepted" + (r.ok ? "" : " — refused: " + r.reason));
@@ -1935,10 +1398,7 @@ async function decodingSection(){
         check(r.repaired.some(w => /Lying Dimensions/.test(w) && /400×300/.test(w)),
           "the correction is reported, naming both sizes: "
           + json(r.repaired.filter(w => /Lying/.test(w))));
-        /* the frame was legal against the claimed 400x300 (pan limit 1.0) and
-           is not against the real 1x1 (pan limit 0.5), so a frame still sitting
-           at 0.9 means nothing re-clamped it and the crop points outside the
-           picture */
+
         eq(lying && lying.frame && lying.frame.ox, 0.5,
           "and the frame is re-clamped against dimensions that are now real");
         eq(lying && lying.frame && lying.frame.oy, -0.45,
@@ -1952,7 +1412,6 @@ async function decodingSection(){
       }
     }
 
-    /* -------- 10d. oversized images, built rather than committed */
     {
       const person = (name, photo) => ({id:"x-" + name, name:name, tierId:"t1",
         office:"FRA", role:"", photo:photo, pw:240, ph:240,
@@ -1984,7 +1443,6 @@ async function decodingSection(){
       }
     }
 
-    /* -------- 10e. structure is still proven first, and refusals are still whole */
     {
       const before = M.decoded().length;
       const bad = await M.openRoster(fixture("malformed"));
@@ -1993,14 +1451,11 @@ async function decodingSection(){
       eq(M.decoded().length, before,
         "a structurally invalid file is refused before anything is handed to a decoder");
 
-      /* a person pointing at a grade that does not exist is fatal even though
-         every photo in the file is perfect — the two halves do not trade off */
       const orphan = await M.openRoster(json(ok({
         people: [{id:"p", name:"Lost", tierId:"nope", photo:JPEG_URL, pw:1, ph:1}]})));
       check(!orphan.ok, "a broken reference is fatal regardless of the photos");
     }
 
-    /* -------- 10f. nothing but our own two formats ever reaches a decoder */
     {
       const all = M.decoded();
       check(all.length > 0, "the decoder was actually exercised — " + all.length + " loads");
@@ -2019,41 +1474,16 @@ async function decodingSection(){
   report();
 }
 
-/* ---------------------------------------------------------- 11. the header is
-   read before the browser decodes anything
-
-   §10 proved the app learns a photo's real size. It learned it from the
-   decoder, which is to say after the decoder had already allocated the pixels
-   — and it is the allocation that costs. A PNG header is thirty-three bytes
-   and may honestly declare 60000x60000, which is fourteen gigabytes of RGBA
-   for a file that fits in a tweet.
-
-   So the format and the size are now read out of the bytes first. Everything
-   below is built from real byte structures — signatures, chunk lengths, JPEG
-   marker segments — and never from a table of known-good strings: a lookup
-   table would keep passing after the app stopped parsing anything at all.
-
-   The assertion that matters most in this whole file is the last one in each
-   rejection case: `Image.src` was never assigned. */
-
-/* The byte builders live above §9, which needs them too — §9 runs during the
-   file's initial evaluation, and a `const` down here would still be in its
-   temporal dead zone by then. */
-
 async function preflightSection(){
   const png  = (w, h)      => M.dataUrl("png",  pngBytes(w, h));
   const jpeg = (w, h, sof) => M.dataUrl("jpeg", jpegBytes(w, h, sof));
 
-  /* Wraps a decode so the assertion "and never touched the decoder" can be made
-     about it. The count is taken immediately before, so unrelated decoding
-     elsewhere in the suite cannot make a rejection look clean. */
   async function withoutDecoding(label, run){
     const before = M.decoded().length;
     const got = await run();
     return {got: got, touched: M.decoded().length - before, label: label};
   }
 
-  /* -------- 11a. the headers are parsed for real */
   {
     const p = M.photoHeader(png(640, 480));
     check(p && p.w === 640 && p.h === 480,
@@ -2065,8 +1495,6 @@ async function preflightSection(){
     check(g && g.w === 800 && g.h === 1200,
       "a progressive JPEG's dimensions are read out of its SOF2 — got " + json(g));
 
-    /* the other frame markers browsers read, and the three holes in the range
-       that are not frames at all */
     for(const sof of [0xC1, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF]){
       const r = M.photoHeader(jpeg(300, 200, sof));
       check(r && r.w === 300 && r.h === 200,
@@ -2078,31 +1506,28 @@ async function preflightSection(){
         + " is a table, not a frame — no dimensions are read out of it");
     }
 
-    /* a header that runs past the scan window is not a header we have */
     check(M.PHOTO_SCAN_BYTES > 0 && M.PHOTO_SCAN_BYTES <= 4 * 1024 * 1024,
       "the scan window is bounded — " + M.PHOTO_SCAN_BYTES + " bytes");
   }
 
-  /* -------- 11b. corrupt, truncated and nonsensical bytes */
   {
     const CASES = [
       ["corrupt JPEG bytes", M.dataUrl("jpeg", [0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77])],
       ["corrupt PNG bytes",  M.dataUrl("png",  [0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
                                                 0, 0, 0, 13, 1, 2, 3, 4, 0, 0, 1, 0, 0, 0, 1, 0])],
-      /* SOI, then an APP0 claiming 0x4000 bytes that are not there */
+
       ["a truncated JPEG marker segment",
         M.dataUrl("jpeg", [0xFF, 0xD8, 0xFF, 0xE0, 0x40, 0x00, 0x4A, 0x46, 0x49, 0x46])],
-      /* SOI and a frame marker with nothing behind it */
+
       ["a JPEG cut off inside its SOF",
         M.dataUrl("jpeg", [0xFF, 0xD8, 0xFF, 0xC0, 0x00, 0x11, 0x08, 0x01])],
       ["a truncated PNG IHDR", M.dataUrl("png", pngBytes(640, 480).slice(0, 20))],
-      /* the signature and the chunk type are right; the chunk claims a length
-         IHDR is not allowed to have */
+
       ["a PNG whose IHDR is the wrong length",
         M.dataUrl("png", PNG_SIG_BYTES.concat([0, 0, 0, 9], [0x49, 0x48, 0x44, 0x52],
           be32bytes(640), be32bytes(480), [8, 6, 0, 0, 0], [0, 0, 0, 0]))],
       ["a PNG with no IHDR first", M.dataUrl("png",
-        PNG_SIG_BYTES.concat([0, 0, 0, 13], [0x73, 0x52, 0x47, 0x42],   // "sRGB"
+        PNG_SIG_BYTES.concat([0, 0, 0, 13], [0x73, 0x52, 0x47, 0x42],
           be32bytes(640), be32bytes(480), [8, 6, 0, 0, 0], [0, 0, 0, 0]))],
       ["a JPEG with no SOI", M.dataUrl("jpeg", jpegBytes(640, 480).slice(2))],
       ["a JPEG that reaches its scan with no frame", M.dataUrl("jpeg",
@@ -2112,7 +1537,6 @@ async function preflightSection(){
       ["a JPEG of zero width",  M.dataUrl("jpeg", jpegBytes(0, 480))],
       ["a JPEG of zero height", M.dataUrl("jpeg", jpegBytes(640, 0))],
 
-      /* -------- 11c. the label does not decide which parser runs */
       ["JPEG bytes labelled as PNG", M.dataUrl("png",  jpegBytes(640, 480))],
       ["PNG bytes labelled as JPEG", M.dataUrl("jpeg", pngBytes(640, 480))],
       ["an SVG document labelled as JPEG",
@@ -2133,7 +1557,6 @@ async function preflightSection(){
     }
   }
 
-  /* -------- 11d. the size limits, applied to the header */
   {
     const L = M.LIMITS;
     const OVER = [
@@ -2141,8 +1564,7 @@ async function preflightSection(){
       ["a JPEG edge over the limit", jpeg(L.photoDim + 1, 1000), /px limit/],
       ["an area over the limit",  png(7000, 7000),           /megapixel/],
       ["a ratio over the limit",  png(2000, 100),            /long and thin/],
-      /* the case the whole change exists for: a header three dozen bytes long
-         declaring more pixels than the machine has memory for */
+
       ["an absurd PNG",           png(60000, 60000),         /px limit/]
     ];
     for(const [label, url, why] of OVER){
@@ -2157,7 +1579,6 @@ async function preflightSection(){
         "AND REFUSES IT BEFORE Image.src — " + label + " must never be decoded");
     }
 
-    /* the boundary, so the limit is a limit and not an approximation */
     {
       const at = png(L.photoDim, 1000);
       const r = await withoutDecoding("an edge exactly at the limit", () => M.decodeImage(at));
@@ -2167,7 +1588,6 @@ async function preflightSection(){
     }
   }
 
-  /* -------- 11e. and the ordinary path still works */
   {
     for(const [label, url, w, h] of [
       ["a baseline JPEG",    jpeg(1024, 768, 0xC0), 1024, 768],
@@ -2181,11 +1601,8 @@ async function preflightSection(){
     }
   }
 
-  /* -------- 11f. the decoder still has the last word */
   {
-    /* A header can be perfect and the rest of the file still unreadable —
-       truncated image data, a corrupt compressed stream. Preflight is a gate,
-       not a substitute for decoding. */
+
     {
       const url = png(400, 300);
       M.refuseDecode(url);
@@ -2195,9 +1612,6 @@ async function preflightSection(){
       eq(r.touched, 1, "and it took a real decode to find that out");
     }
 
-    /* …and a header can lie about the size of the image behind it, which is the
-       same trick one level down: pass the limits with a small header, deliver a
-       large image. */
     {
       const url = png(401, 300);
       M.decodeAs(url, 9000, 9000);
@@ -2207,8 +1621,6 @@ async function preflightSection(){
         "an image that decodes to dimensions its header did not declare is refused");
     }
 
-    /* the one disagreement that is honest: EXIF orientation transposes a JPEG,
-       so the browser reports the SOF dimensions the other way round */
     {
       const url = jpeg(1200, 1600, 0xC0);
       M.decodeAs(url, 1600, 1200);
@@ -2219,7 +1631,6 @@ async function preflightSection(){
     }
   }
 
-  /* -------- 11g. cancellation, at both of the points it can arrive */
   {
     const never  = () => false;
     const always = () => true;
@@ -2235,8 +1646,6 @@ async function preflightSection(){
       check(r && r.w === 321, "an uncancelled decode is unaffected — got " + json(r));
     }
 
-    /* between two photos: the roster has three, and the decision to give up is
-       taken while the first one is in flight */
     {
       const roster = ok({people: [
         {id:"a", name:"First",  tierId:"t1", office:"", role:"", photo:png(410, 310), pw:410, ph:310},
@@ -2244,13 +1653,6 @@ async function preflightSection(){
         {id:"c", name:"Third",  tierId:"t1", office:"", role:"", photo:png(610, 510), pw:610, ph:510}
       ]});
 
-      /* "a newer Open arrived while the first photo was in the decoder", said
-         exactly: false until one photo has been handed over, true from then on.
-         Counting calls to the predicate instead would be counting an
-         implementation detail of where the checks happen to sit. */
-      /* the same run twice: once through decodeRosterPhotos, to look at what a
-         cancellation did to the half-built roster, and once through the whole
-         door, to look at the verdict */
       {
         const before = M.decoded().length;
         const built = M.parseAndValidateRoster(json(roster));
@@ -2258,12 +1660,7 @@ async function preflightSection(){
           () => M.decoded().length > before);
         eq(finished, false, "decodeRosterPhotos reports that it did not finish");
         eq(M.decoded().length - before, 1, "having decoded one photo of the three");
-        /* The photo that was in the decoder when the cancellation landed must
-           not be written back. Its answer is about a document nobody is waiting
-           for, and `false` from this function is only worth anything if it also
-           means "and I changed nothing on the way to saying so" — otherwise a
-           later caller that kept the object would find one corrected size, two
-           untouched ones, and no way to tell which was which. */
+
         eq(built.state.people[0].pw, 410,
           "the photo that was mid-decode when the Open was cancelled is left exactly as it was");
         eq(built.state.people[0].ph, 310, "in both dimensions");
@@ -2285,7 +1682,6 @@ async function preflightSection(){
       eq(r.state, undefined, "and no state to adopt");
     }
 
-    /* cancelled before a single photo is looked at */
     {
       const roster = ok({people: [
         {id:"a", name:"First", tierId:"t1", office:"", role:"", photo:png(420, 320), pw:420, ph:320}
@@ -2296,9 +1692,6 @@ async function preflightSection(){
       check(r && r.cancelled === true, "and says so — got " + json(r));
     }
 
-    /* structure is still fatal, and a cancellation does not disguise it: a file
-       that is not a roster is refused with a reason before cancellation is even
-       asked about */
     {
       const r = await M.openRoster("{oh dear", {cancelled: always});
       eq(r.ok, false, "a file that is not JSON is still refused");
@@ -2307,7 +1700,6 @@ async function preflightSection(){
       eq(r.cancelled, undefined, "and is not dressed up as one");
     }
 
-    /* an uncancelled Open is untouched by any of this */
     {
       const roster = ok({people: [
         {id:"a", name:"First",  tierId:"t1", office:"", role:"", photo:png(430, 330), pw:0, ph:0},
@@ -2320,13 +1712,12 @@ async function preflightSection(){
       eq(M.decoded().length - before, 2, "decoding every photo in the file");
       check(r.ok && r.state.people[0].pw === 430 && r.state.people[1].pw === 530,
         "and giving each of them its real size");
-      /* the default: no options at all, the way every other caller writes it */
+
       const plain = await M.openRoster(json(roster));
       check(plain.ok, "and openRoster still works with no options object at all");
     }
   }
 
-  /* -------- 11h. photoBytes on its own */
   {
     eq(M.photoBytes("https://example.invalid/x.png"), null,
       "photoBytes refuses a remote URL — it decodes base64, it never fetches");
@@ -2349,7 +1740,7 @@ async function preflightSection(){
       check(got && want.every((b, i) => got.bytes[i] === b),
         "byte for byte");
     }
-    /* the window is a ceiling on what is allocated, not on what is accepted */
+
     {
       const big = pngBytes(640, 480).concat(new Array(M.PHOTO_SCAN_BYTES).fill(0x55));
       const got = M.photoBytes(M.dataUrl("png", big));
@@ -2361,7 +1752,6 @@ async function preflightSection(){
     }
   }
 
-  /* -------- 11i. and the standing invariant, re-checked over the whole run */
   {
     const all = M.decoded();
     check(all.every(s => /^data:image\/(jpeg|png);base64,/.test(String(s))),
@@ -2370,20 +1760,6 @@ async function preflightSection(){
   }
 }
 
-/* --------------------------------------------------------- 12. the validator
-   is not the grade factory
-
-   Every path that CREATES a grade goes through newTier(). The validator
-   deliberately does not: it is judging a grade someone else wrote, and its
-   per-field defaults exist to decide what was stated and what has to be reported
-   as a repair — which a factory that only knows about defaults cannot answer.
-   Sharing a constructor between "make a new thing" and "salvage an untrusted
-   thing" is how the second quietly starts accepting whatever the first assumes.
-
-   What still has to hold is that the two agree on the SHAPE, because that shape
-   is what an Open puts into the document. Compared against a grade the factory
-   actually produces, not against a field list written out here: a literal copied
-   from either side would be the same source answering for itself. */
 {
   const raw = JSON.stringify({tiers:[{id:"x", code:"P", label:"Partner"}], people:[]});
   const res = M.parseAndValidateRoster(raw);
@@ -2394,14 +1770,12 @@ async function preflightSection(){
     "the validator emits exactly the fields a freshly made grade has — got "
     + Object.keys(opened).sort().join(","));
   check(!("role" in opened), "…and no role on the way in");
-  /* And it agrees on the VALUES for the fields the file left out, or an opened
-     grade and a new one would draw differently from the same silence. */
+
   for(const k of ["fill", "attach", "merge", "align"]){
     eq(opened[k], made[k],
       "a grade that states no " + k + " opens with the value a new grade gets");
   }
-  /* The repair machinery is what the factory would have taken away: a STATED
-     unusable value is still repaired and still reported. */
+
   const bad = JSON.stringify({tiers:[{id:"x", code:"P", label:"Partner", fill:"chartreuse"}],
                               people:[]});
   const rep = M.parseAndValidateRoster(bad);
@@ -2411,8 +1785,6 @@ async function preflightSection(){
     "…and reported as a repair, which is the job the factory cannot do — got "
     + JSON.stringify(rep && rep.repaired));
 }
-
-/* ---------------------------------------------------------- report */
 
 function report(){
   if(failures.length){

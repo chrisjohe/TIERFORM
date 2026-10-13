@@ -1,22 +1,3 @@
-/* Fixture suite for tierform_app.html.
- *
- * The other three suites build their own inputs. This one drives the real
- * functions against the roster FILES in test/fixtures/, which is the only way
- * to cover the thing that actually breaks in the field: someone opens a file
- * this build did not write — an older one, a hand-edited one, a hostile one.
- *
- * What it asserts here is deliberately limited to invariants that must hold in
- * EVERY build, before and after the security work: files parse (or fail to)
- * as intended, valid files produce finite geometry() upgrades legacy
- * files and is idempotent. The assertions about rejecting hostile input live
- * in test/import.js, because there is nothing to reject until the validator
- * exists — see test/MANUAL.md for the measured baseline of what today's build
- * does with the hostile fixtures.
- *
- * Run:  node test/fixtures.js
- *   or: osascript -l JavaScript test/fixtures.js
- */
-
 function readFile(path){
   if(typeof require !== "undefined") return require("fs").readFileSync(path, "utf8");
   ObjC.import("Foundation");
@@ -33,90 +14,67 @@ const ROOT   = here();
 const HTML   = readFile(ROOT + "tierform_app.html");
 const SCRIPT = /<script>([\s\S]*)<\/script>/.exec(HTML)[1];
 
-/* ---------------------------------------------------------- extraction */
-
-/* Brace and paren counting runs over a MASK of the source, never over the
-   source itself: a "{" inside a comment, a string or a regex is not a brace,
-   and counting it ends a slice early — on a fragment that may still parse, so
-   the suite goes green having tested something that is not the function. The
-   mask is the same LENGTH as the source and keeps every newline, so an index
-   found in it addresses the same character in the original; slices are always
-   cut from the ORIGINAL, or every extracted function reaches new Function()
-   with its strings blanked out. Regex literals are in the list because of
-   xmlAttr — one line reading .replace(/"/g, "&quot;").replace(/'/g, "&apos;"),
-   which carries five double quotes: a mask that knew only about strings would
-   leave that line believing it was inside one and blank the closing brace.
-   Character classes are tracked too, because [A-Za-z0-9+/] contains a "/".
-   Template substitutions keep their ${ } delimiters and the code between them,
-   whose braces are balanced and real. A string or a regex that reaches a
-   newline without closing is not one, so the mask gives up and rescans from
-   the next character — which bounds a "/" misread as a regex rather than a
-   division to its own line.
-   This function is duplicated in test/harness.js, test/document.js,
-   test/fixtures.js and test/import.js; test/fixtures.js §0 asserts the four
-   copies are byte-identical. */
 function maskLiterals(src){
   const out = src.split(""), n = src.length;
   const sp = k => { if(out[k] !== "\n") out[k] = " "; };
-  /* after one of these words a "/" opens a regex; after any other identifier,
-     after a number and after ) ] it divides */
+
   const REWORD = /^(return|typeof|instanceof|in|of|new|delete|void|case|do|else|yield|await)$/;
   const stack = [{tmpl:false, depth:0}];
-  let value = false;                       // the last token ended a value
+  let value = false;
   let i = 0;
   while(i < n){
     const top = stack[stack.length - 1], c = src[i];
 
-    if(top.tmpl){                          // inside a template's TEXT
+    if(top.tmpl){
       if(c === "\\"){ sp(i); if(i + 1 < n) sp(i + 1); i += 2; continue; }
       if(c === "`"){ sp(i); i++; stack.pop(); value = true; continue; }
-      if(c === "$" && src[i + 1] === "{"){ // the "$" goes, the "{" stays
+      if(c === "$" && src[i + 1] === "{"){
         sp(i); stack.push({tmpl:false, depth:0}); i += 2; value = false; continue;
       }
       sp(i); i++; continue;
     }
 
-    if(c === "/" && src[i + 1] === "/"){                       // line comment
+    if(c === "/" && src[i + 1] === "/"){
       while(i < n && src[i] !== "\n"){ sp(i); i++; }
       continue;
     }
-    if(c === "/" && src[i + 1] === "*"){                       // block comment
+    if(c === "/" && src[i + 1] === "*"){
       const e = src.indexOf("*/", i + 2), end = e < 0 ? n : e + 2;
       while(i < end){ sp(i); i++; }
       continue;
     }
-    if(c === '"' || c === "'"){                                // quoted string
+    if(c === '"' || c === "'"){
       let j = i + 1;
       while(j < n && src[j] !== c && src[j] !== "\n") j += src[j] === "\\" ? 2 : 1;
       if(j < n && src[j] === c){ while(i <= j){ sp(i); i++; } }
-      else i++;                            // no close on this line: not a string
+      else i++;
       value = true; continue;
     }
     if(c === "`"){ sp(i); stack.push({tmpl:true, depth:0}); i++; continue; }
-    if(c === "/" && !value){                                   // regex literal
+    if(c === "/" && !value){
       let j = i + 1, cls = false, end = -1;
       for(; j < n; j++){
         const ch = src[j];
-        if(ch === "\n") break;             // a regex does not span a line
+        if(ch === "\n") break;
         if(ch === "\\"){ j++; continue; }
         if(cls){ if(ch === "]") cls = false; continue; }
         if(ch === "[") cls = true;
         else if(ch === "/"){
           j++;
-          while(j < n && /[A-Za-z]/.test(src[j])) j++;         // flags
+          while(j < n && /[A-Za-z]/.test(src[j])) j++;
           end = j; break;
         }
       }
       if(end > 0){ while(i < end){ sp(i); i++; } value = true; continue; }
     }
-    if(/[A-Za-z0-9_$]/.test(c)){                               // identifier or number
+    if(/[A-Za-z0-9_$]/.test(c)){
       let j = i;
       while(j < n && /[A-Za-z0-9_$]/.test(src[j])) j++;
       value = !REWORD.test(src.slice(i, j));
       i = j; continue;
     }
-    if(c === "}" && top.depth === 0 && stack.length > 1){       // closes a ${ }
-      stack.pop(); i++; value = true; continue;                 // stays visible
+    if(c === "}" && top.depth === 0 && stack.length > 1){
+      stack.pop(); i++; value = true; continue;
     }
     if(c === "{"){ top.depth++; value = false; i++; continue; }
     if(c === "}"){ top.depth--; value = false; i++; continue; }
@@ -153,8 +111,6 @@ function grabConst(name){
   throw new Error("fixtures: unterminated const " + name);
 }
 
-/* Same measurement stub as test/harness.js: widths must be finite and
-   proportional to length, nothing more. */
 const PREAMBLE = `
   let state = null;
   const meas = { font: "", measureText(t){
@@ -173,31 +129,22 @@ const M = new Function(PREAMBLE +
    "validColour","parseAndValidateRoster",
    "splitName","initials","tierOf","tierRole","subline","withAlpha","angleIndex",
    "codeParts","frameRect","frameLimit","clampFrame","normalizeGradeLinks",
-   /* computeLayout only dispatches now — pyramid, tornado AND histogram
-      geometry all live behind the shared band-stack machinery (buildBandGroups,
-      buildBandStack, emitHeaderTexts, emitBandPeople) that computeTriangleLayout
-      and computeHistogramLayout both call, so all of it has to be extracted
-      with it */
+
    "computeLayout","gradeHeadingTexts",
    "buildBandGroups","buildBandStack","emitHeaderTexts","emitBandPeople",
    "computeTriangleLayout","computeHistogramLayout",
    "computePyramidLayout","computeTornadoLayout","computeSwimlaneLayout",
    "computeHiveLayout","computeMatrixLayout",
    "nameSegs","ellipsize","fitName","toSVG",
-   /* the shared measurement helpers the geometry engines call while sizing
-      a person's label and the header text. */
+
    "personLabelWidth","headNeedWidth","docFont",
-   /* parseAndValidateRoster prunes memberless groups after the person loop,
-      and resolves a stated groupId through the fresh-id map; subline
-      reads a person's group back through groupLabel. All four come along or
-      neither of those two extracted functions is complete. */
+
    "newGroup","resolveGroupId","groupLabel","pruneGroups"]
    .map(grabFn).join("\n") + "\n" +
   "return {computeLayout, computePyramidLayout, computeTornadoLayout, computeHistogramLayout, computeSwimlaneLayout, computeHiveLayout, computeMatrixLayout," +
-  " toSVG, angleIndex, parseAndValidateRoster," +
+  " meas, toSVG, angleIndex, parseAndValidateRoster," +
   " validatePhoto, tierRole, groupLabel, resolveGroupId, setState(s){ state = s; }};")();
 
-/* ---------------------------------------------------------- assertions */
 
 let passed = 0;
 const failures = [];
@@ -206,55 +153,20 @@ const eq = (a, b, m) => check(a === b, m + " — got " + JSON.stringify(a) + ", 
 
 function load(name){ return readFile(ROOT + "test/fixtures/" + name + ".json"); }
 function parsed(name){ return JSON.parse(load(name)); }
-/* There is no upgrade step in front of the validator — it IS how a roster
-   file becomes a document, answering for every field a file omits and the
-   only door one comes through. Driving the fixtures through it rather than
-   through a normaliser is both closer to the app and keeps each call
-   building a fresh state rather than mutating a shared one. */
+
 function fresh(name){
   const r = M.parseAndValidateRoster(load(name));
   if(!r.ok) throw new Error(name + ".json no longer opens: " + r.reason);
   return r.state;
 }
 
-/* Declared outside the try below, because the report at the end names them and
-   a block-scoped const would be out of reach there. */
-/* photos.json is structurally ordinary — what is wrong with it is inside the
-   base64, which only a decoder can see. It belongs here so the roster panel and
-   the layout are proven against photos that never resolve; the decode verdicts
-   themselves are test/import.js §10. */
 const VALID   = ["current","legacy","pyramid-zero","unicode","photos"];
 const HOSTILE = ["bad-refs","bad-values","injection"];
-const BROKEN  = ["malformed"];
-const ALL = VALID.concat(HOSTILE, BROKEN);
 
-/* A throw part-way through is itself a failure, and the assertions collected
-   before it are the context that explains it. Reporting only the exception
-   threw that away — a wrong render order surfaced as a bare TypeError with
-   no indication of which guarantee had broken. */
 try{
-  /* ---------------------------------------------------------- 0. the extractor's literal mask
 
-     Every suite that slices a function out of the app finds the closing brace
-     by counting, and counts over maskLiterals(). Nothing else in the repo tests
-     the thing all four of them stand on, and its failure is the quiet kind: a
-     slice that ends early is a fragment that may still parse, so the suite goes
-     green having exercised something that is not the function.
-
-     It is tested here rather than four times over because the four copies are
-     byte-identical and this section proves that first — one behavioural test of
-     one copy plus a textual check that the others are the same text covers all
-     four, and a copy that drifts fails on the drift rather than silently going
-     untested. It is in this suite because this is the one that already reads
-     files other than the app, and because both drag surfaces are pulled in
-     as whole instantiation statements rather than as individually extracted
-     listeners — which keeps the extractor from being tripped up by a brace
-     inside prose cutting a listener short. */
   {
-    /* The extractor's own question, written out here rather than borrowed from
-       grabFn: an assertion answered by the code it checks agrees with it no
-       matter what that code says. Returns the slice from the ORIGINAL, which is
-       also how each case proves the mask never reaches new Function(). */
+
     const bodyOf = (src) => {
       const mask = maskLiterals(src);
       const open = mask.indexOf("{");
@@ -267,26 +179,17 @@ try{
       return null;
     };
 
-    /* Indices found in the mask address the original, so these two are what
-       makes slicing from the original legal at all. */
     const sample = 'a\n"b{c"\n/* d */\n';
     eq(maskLiterals(sample).length, sample.length,
       "the mask is the same length as the source");
     eq(maskLiterals(sample).split("\n").length, sample.split("\n").length,
       "and keeps every newline, so a line number means the same thing in both");
 
-    /* One case per thing that can carry a brace which is not a brace. The
-       expected slice is a literal: it fails when the mask changes, which a
-       value read back out of the mask would not. */
     const cases = [
       ["a brace in a line comment",
        'function f(){ // an unpaired { in prose\n  return 1;\n}',
        '{ // an unpaired { in prose\n  return 1;\n}'],
-      /* Two lines, because a block comment on ONE line is masked by the regex
-         branch as well: an opening slash-star reads as a regex, and the slash
-         that ends the comment ends the regex, which blanks the same span. The
-         assertion then stays green with comment handling switched off. A regex
-         may not cross a newline; the app's prose comments nearly all do. */
+
       ["a brace in a block comment",
        'function f(){\n  /* an unpaired { in\n     prose */\n  return 1;\n}',
        '{\n  /* an unpaired { in\n     prose */\n  return 1;\n}'],
@@ -305,27 +208,15 @@ try{
       ["a ${} substitution holding an object literal",
        'function f(){ const s = `x${ {a:1}.a }y`; return s; }',
        '{ const s = `x${ {a:1}.a }y`; return s; }'],
-      /* The case that earns ${} handling rather than blanking a template whole:
-         a backtick inside a string inside a substitution. Blanking to the next
-         raw backtick ends the template in the middle of that string, and the
-         brace count never recovers. */
+
       ["a backtick inside a string inside a substitution",
        'function f(){ const s = `x${ "a`b" }y{`; return s; }',
        '{ const s = `x${ "a`b" }y{`; return s; }'],
-      /* Modelled on xmlAttr, the line this whole change exists for: a regex
-         made of a quote leaves an ODD number of quotes on the line, so a mask
-         that does not know regexes reads from the regex's quote to the next
-         one and blanks whatever is between. Here that span covers the opening
-         brace of the if-block, and the count closes a statement early. The
-         real xmlAttr line is NOT used as the case: it carries no brace, so the
-         newline guard alone rescues it and the assertion could never go red. */
+
       ["quotes inside a regex literal",
        'function f(){ const a = s.replace(/"/g, "x"); if(b){ return "y"; } return 1; }',
        '{ const a = s.replace(/"/g, "x"); if(b){ return "y"; } return 1; }'],
-      /* The other side of the same heuristic: a "/" after a value divides. Both
-         slashes are on one line on purpose — a regex may not span a line, so a
-         misread one that runs to the end of its line does no damage, and the
-         case would stay green. */
+
       ["a division, which is not a regex",
        'function f(){ const h = w / 2; if(h){ return 1 / 2; } return 0; }',
        '{ const h = w / 2; if(h){ return 1 / 2; } return 0; }']
@@ -333,13 +224,6 @@ try{
     for(const [what, src, want] of cases)
       eq(bodyOf(src), want, "the mask sees past " + what);
 
-    /* ---- the same mask under the OTHER extractor shape.
-       grabConst counts ( [ { and stops at the first ";" outside them, so what
-       breaks it is an unbalanced PAREN, not an unbalanced brace. That is what
-       a regex character class costs when it is not tracked: the app's base64
-       guard is /…([A-Za-z0-9+/]+={0,2})$/, whose class holds a "/", and a mask
-       that ends the regex there leaves a stray ")" behind. Its braces are
-       balanced, so a brace-counting case cannot see this at all. */
     const constOf = (src) => {
       const mask = maskLiterals(src);
       let depth = 0;
@@ -358,15 +242,6 @@ try{
        'const X = { a: "; not the end", b: 2 };',
       "and a \";\" inside a string does not end a declaration");
 
-    /* ---- and the four copies are one text.
-       maskLiterals is duplicated in four suites, so the cases above are a test
-       of the other three only for as long as they are the same characters.
-
-       The reference is the RUNNING function's own source, not a fifth read of
-       this file: four files compared against each other say nothing about the
-       code that actually answered the cases, and would agree while something
-       else entirely was doing the masking. Each copy is cut on the least that
-       identifies it — the signature line, and the first "\n}" at column zero. */
     const copyOf = (file) => {
       const t = readFile(ROOT + "test/" + file);
       const a = t.indexOf("function maskLiterals(src){");
@@ -374,45 +249,16 @@ try{
       return a < 0 || b < 0 ? null : t.slice(a, b + 2);
     };
     const running = maskLiterals.toString();
-    /* The reference gets its own assertion: a truncated one would make every
-       comparison below agree about a fragment. */
+
     check(running.length > 1000 && /REWORD/.test(running) && /stack\.pop\(\)/.test(running),
       "the function that answered the cases above is the whole mask — got "
       + running.length + " chars");
-    for(const file of ["fixtures.js", "harness.js", "document.js", "import.js"])
+    for(const file of ["harness.js", "fixtures.js", "document.js", "import.js"])
       check(copyOf(file) === running,
         "test/" + file + " carries that same maskLiterals, character for character"
         + " — a copy that drifts is a suite counting braces by different rules");
   }
 
-  /* ---------------------------------------------------------- 1. the set is intact */
-
-
-  for(const name of ALL){
-    let raw = null;
-    try{ raw = load(name); }catch(e){}
-    check(raw && raw.length > 0, "fixture " + name + ".json is present and non-empty");
-  }
-
-  /* malformed.json exists to prove the JSON.parse failure path is reachable at
-     all. If it ever becomes parseable the import error handling is untested. */
-  for(const name of BROKEN){
-    let threw = false;
-    try{ JSON.parse(load(name)); }catch(e){ threw = true; }
-    check(threw, "fixture " + name + ".json still fails JSON.parse");
-  }
-  for(const name of VALID.concat(HOSTILE)){
-    let ok = false;
-    try{ JSON.parse(load(name)); ok = true; }catch(e){}
-    check(ok, "fixture " + name + ".json is syntactically valid JSON");
-  }
-
-  /* ---------------------------------------------------------- 2. finite geometry */
-
-  /* The signature failure of a layout regression is a blank chart, and the cause
-     is always NaN reaching a coordinate. Every fixture that reaches the renderer
-     at all must produce finite numbers — including the hostile ones, because
-     rejecting a file is the validator's job and crashing is never the answer. */
   function nonFinite(L){
     const bad = [];
     L.bands.forEach((b, i) => b.pts.forEach(q => {
@@ -432,9 +278,7 @@ try{
 
   for(const name of VALID.concat(HOSTILE)){
     const opened = M.parseAndValidateRoster(load(name));
-    /* A file the validator refuses never reaches a renderer at all — that is
-       what the door is for. What has to be true of it is that it says why,
-       rather than failing silently or throwing. */
+
     if(!opened.ok){
       check(typeof opened.reason === "string" && opened.reason.length > 0,
         name + ".json is refused with a stated reason");
@@ -458,18 +302,9 @@ try{
     }
   }
 
-  /* ------------------------------------------- 3. a sparse file opens anyway */
-
-  /* legacy.json states very little: no fill, no attach, no merge, no align, no
-     layout, no label settings, a pyramid angle written as a word, and photos
-     with no dimensions. There is no upgrade step in front of the validator any
-     more, so the validator alone has to answer for all of it — this is the file
-     that proves it does. Fields it does not recognise are dropped rather than
-     carried, and nothing it fills in is invented beyond the documented default. */
   {
     const st = fresh("legacy");
 
-    /* an unknown property is not carried into the document */
     check(st.tiers.every(t => t.style === undefined),
           "legacy: a property this build has no meaning for is dropped, not kept");
     check(st.tiers.every(t => t.fill === "green" || t.fill === "white"),
@@ -477,30 +312,22 @@ try{
     check(st.tiers.every(t => typeof t.attach === "boolean"), "legacy: attach is boolean everywhere");
     check(st.tiers.every(t => typeof t.merge === "boolean"),  "legacy: merge is boolean everywhere");
     check(st.tiers.every(t => !!t.align), "legacy: every grade has an alignment");
-    /* The rendered result is what matters, not a field sitting in the data.
-       Every grade prints a title, and none of them carries one of its own — the
-       grade's name IS the title. */
+
     check(st.tiers.every(t => !!M.tierRole(t)), "legacy: every grade still prints a title");
     check(st.tiers.every(t => t.role === undefined),
           "legacy: no grade carries a title of its own");
     check(st.tiers.every(t => M.tierRole(t) === t.label),
           "legacy: and the title a grade prints is exactly its name");
 
-    /* The file's own grades come through as it wrote them. Nothing renames,
-       splits or reorders a grade on open — what the file says is what opens. */
     eq(st.tiers.length, parsed("legacy").tiers.length,
        "legacy: it opens with the grades it states, no more and no fewer");
     eq(st.tiers.map(t => t.code).join(","), parsed("legacy").tiers.map(t => t.code).join(","),
        "legacy: with their codes untouched and in their own order");
 
-    /* a person's own role is theirs — the validator has no opinion about it */
     const bea = st.people.find(p => p.name === "Bea Brandt");
     check(bea && bea.role === "(Senior) Assistant",
           "legacy: a person's stated role is carried through exactly");
 
-    /* photos with no stated dimensions fall back to the default 240x240
-       square with the identity frame, which is what makes frameRect draw a
-       plain full circle */
     for(const p of st.people){
       if(p.photo){
         eq(p.pw, 240, "legacy: " + p.name + " gets the default photo width");
@@ -513,179 +340,19 @@ try{
       }
     }
 
-    /* legacy.json states its angle as the word "subtle" — angleIndex has no
-       word map, so any non-number, not just this one, falls back to 2 */
     eq(st.angle, 2, "legacy: a non-number angle (\"subtle\") falls back to 2");
     check(st.page && st.density && st.bg && st.inkOnColour && st.inkOnWhite,
           "legacy: the fields that did not exist yet were filled in");
     eq(st.layout, "pyramid", "legacy: a file that states no layout opens as a pyramid");
   }
 
-  /* ---- 3a. no committed roster file states a layout, so every one of them takes
-     the validator's default — and the engine that default names is the one that
-     draws it. These are the real files, so this is what proves an existing roster
-     opens unchanged rather than blank. */
-  {
-    for(const name of VALID){
-      const st = fresh(name);
-      eq(st.layout, "pyramid", name + ".json states no layout and opens as a pyramid");
-      M.setState(st);
-      const viaDispatch = JSON.stringify(M.computeLayout(st));
-      const viaEngine   = JSON.stringify(M.computePyramidLayout(st));
-      eq(viaDispatch, viaEngine, name + ".json: the dispatcher changes none of its geometry");
-    }
-  }
-
-  /* ---- 3a2. a real roster stating tornado opens and draws as one, end to end.
-     current.json states no layout in its committed form, so this re-serialises
-     it with layout:"tornado" added and re-opens THAT through the real
-     validator — the same door any roster file comes through — rather than
-     mutating an in-memory state object after the fact. Proves the whole
-     pipeline: parseAndValidateRoster keeps the stated value, computeLayout
-     dispatches to computeTornadoLayout, and the geometry a real roster's
-     photos/people/grades produce is finite. */
-  {
-    const raw = parsed("current");
-    raw.layout = "tornado";
-    const r = M.parseAndValidateRoster(JSON.stringify(raw));
-    check(r.ok, "current.json with layout:tornado added is accepted");
-    if(r.ok){
-      eq(r.state.layout, "tornado", "and keeps the stated layout");
-      M.setState(r.state);
-      const viaDispatch = JSON.stringify(M.computeLayout(r.state));
-      const viaEngine   = JSON.stringify(M.computeTornadoLayout(r.state));
-      eq(viaDispatch, viaEngine, "current.json as tornado: the dispatcher reaches the tornado engine");
-      const L = M.computeLayout(r.state);
-      const bad = [];
-      (function walkFinite(node, path){
-        if(typeof node === "number"){ if(!isFinite(node)) bad.push(path); return; }
-        if(Array.isArray(node)){ node.forEach((v, i) => walkFinite(v, path + "[" + i + "]")); return; }
-        if(node && typeof node === "object"){
-          for(const k of Object.keys(node)){
-            if(k === "src" || k === "data") continue;
-            walkFinite(node[k], path + "." + k);
-          }
-        }
-      })(L, "L");
-      check(bad.length === 0, "current.json as tornado produces finite geometry"
-        + (bad.length ? " — NaN at " + bad.slice(0, 3).join(", ") : ""));
-      check(L.bands.length > 1, "and draws real bands, not an empty chart");
-    }
-  }
-
-  /* ---- 3a3. a real roster stating histogram opens and draws as one, end to
-     end — the same proof §3a2 gives Tornado, for the third 1D engine. */
-  {
-    const raw = parsed("current");
-    raw.layout = "histogram";
-    const r = M.parseAndValidateRoster(JSON.stringify(raw));
-    check(r.ok, "current.json with layout:histogram added is accepted");
-    if(r.ok){
-      eq(r.state.layout, "histogram", "and keeps the stated layout");
-      M.setState(r.state);
-      const viaDispatch = JSON.stringify(M.computeLayout(r.state));
-      const viaEngine   = JSON.stringify(M.computeHistogramLayout(r.state));
-      eq(viaDispatch, viaEngine, "current.json as histogram: the dispatcher reaches the histogram engine");
-      const L = M.computeLayout(r.state);
-      const bad = [];
-      (function walkFinite(node, path){
-        if(typeof node === "number"){ if(!isFinite(node)) bad.push(path); return; }
-        if(Array.isArray(node)){ node.forEach((v, i) => walkFinite(v, path + "[" + i + "]")); return; }
-        if(node && typeof node === "object"){
-          for(const k of Object.keys(node)){
-            if(k === "src" || k === "data") continue;
-            walkFinite(node[k], path + "." + k);
-          }
-        }
-      })(L, "L");
-      check(bad.length === 0, "current.json as histogram produces finite geometry"
-        + (bad.length ? " — NaN at " + bad.slice(0, 3).join(", ") : ""));
-      check(L.bands.length > 1, "and draws real bands, not an empty chart");
-    }
-  }
-
-  /* ---- 3a4. a real roster stating hive opens and draws as one, end to
-     end — the same proof §3a2/§3a3 give Tornado and Histogram, for the
-     fifth engine. */
-  {
-    const raw = parsed("current");
-    raw.layout = "hive";
-    const r = M.parseAndValidateRoster(JSON.stringify(raw));
-    check(r.ok, "current.json with layout:hive added is accepted");
-    if(r.ok){
-      eq(r.state.layout, "hive", "and keeps the stated layout");
-      M.setState(r.state);
-      const viaDispatch = JSON.stringify(M.computeLayout(r.state));
-      const viaEngine   = JSON.stringify(M.computeHiveLayout(r.state));
-      eq(viaDispatch, viaEngine, "current.json as hive: the dispatcher reaches the hive engine");
-      const L = M.computeLayout(r.state);
-      const bad = [];
-      (function walkFinite(node, path){
-        if(typeof node === "number"){ if(!isFinite(node)) bad.push(path); return; }
-        if(Array.isArray(node)){ node.forEach((v, i) => walkFinite(v, path + "[" + i + "]")); return; }
-        if(node && typeof node === "object"){
-          for(const k of Object.keys(node)){
-            if(k === "src" || k === "data") continue;
-            walkFinite(node[k], path + "." + k);
-          }
-        }
-      })(L, "L");
-      check(bad.length === 0, "current.json as hive produces finite geometry"
-        + (bad.length ? " — NaN at " + bad.slice(0, 3).join(", ") : ""));
-      check(L.bands.length > 1, "and draws real bands, not an empty chart");
-    }
-  }
-
-  /* ---- 3a5. a real roster stating matrix opens and draws as one, end to
-     end — the same proof §3a2/§3a3/§3a4 give Tornado, Histogram and Hive,
-     for the sixth engine. current.json states five real groups (FRA, HAM,
-     BER, MUC, DUS) with people assigned to them, so this exercises the
-     row axis for real rather than the zero-groups degenerate case — that
-     one is proven separately, directly against computeSwimlaneLayout, in
-     test/harness.js. */
-  {
-    const raw = parsed("current");
-    raw.layout = "matrix";
-    const r = M.parseAndValidateRoster(JSON.stringify(raw));
-    check(r.ok, "current.json with layout:matrix added is accepted");
-    if(r.ok){
-      eq(r.state.layout, "matrix", "and keeps the stated layout");
-      M.setState(r.state);
-      const viaDispatch = JSON.stringify(M.computeLayout(r.state));
-      const viaEngine   = JSON.stringify(M.computeMatrixLayout(r.state));
-      eq(viaDispatch, viaEngine, "current.json as matrix: the dispatcher reaches the matrix engine");
-      const L = M.computeLayout(r.state);
-      const bad = [];
-      (function walkFinite(node, path){
-        if(typeof node === "number"){ if(!isFinite(node)) bad.push(path); return; }
-        if(Array.isArray(node)){ node.forEach((v, i) => walkFinite(v, path + "[" + i + "]")); return; }
-        if(node && typeof node === "object"){
-          for(const k of Object.keys(node)){
-            if(k === "src" || k === "data") continue;
-            walkFinite(node[k], path + "." + k);
-          }
-        }
-      })(L, "L");
-      check(bad.length === 0, "current.json as matrix produces finite geometry"
-        + (bad.length ? " — NaN at " + bad.slice(0, 3).join(", ") : ""));
-      check(L.bands.length > 1, "and draws real bands, not an empty chart");
-    }
-  }
-
-  /* ---------------------------------------------------------- 3b. a flat pyramid stays flat */
-
-  /* `st.angle = st.angle || "subtle"` rewrote a legitimate 0 to 2, so a
-     deliberately flat chart came back at angle 3/5 every time it was opened. The
-     fix is `??`, and this is the assertion that keeps it. */
   {
     const st = fresh("pyramid-zero");
     eq(st.angle, 0, "angle: 0 survives opening — a flat chart stays flat");
 
-    /* and it survives the full round trip a save/open really performs */
     const again = M.parseAndValidateRoster(JSON.stringify(st));
     check(again.ok && again.state.angle === 0, "angle: 0 survives a second open");
 
-    /* the same trap applies to every other default where a falsy value is real */
     const falsyIn = {
       tiers: [{id:"t1", code:"P", label:"P", fill:"green",
                attach:false, merge:false, align:"center"}],
@@ -706,14 +373,6 @@ try{
     eq(falsy.inkOnColour, "#000000", "black ink on the accent survives");
   }
 
-  /* ------------------------------------- 3b. a grade title is not a thing */
-
-  /* A grade has no title of its own — a title the whole grade shares would
-     be a level of indirection with nothing to hold, since it IS the grade's
-     name. What prints under a person is `p.role || t.label`. A file may
-     still state a grade `role`; the validator simply does not read it, and
-     does not report that as a repair, because the file is not wrong — it is
-     describing a document shape this build does not have. */
   {
     const open = (tierRole, personRole) => {
       const t = {id:"t1", code:"P", label:"Partner", fill:"green",
@@ -726,35 +385,15 @@ try{
       }));
     };
 
-    for(const r of ["Partner", "Partner (Equity)", "", undefined]){
-      const got = open(r, "");
-      check(got.ok, "a roster opens whatever it says about a grade title: "
-        + JSON.stringify(r) + (got.ok ? "" : " — refused: " + got.reason));
-      if(got.ok){
-        eq(got.state.tiers[0].role, undefined,
-          "no grade title comes out of the validator — in: " + JSON.stringify(r));
-        eq(got.state.people[0].role, "",
-          "and it is never pushed onto a person — in: " + JSON.stringify(r));
-        eq(got.repaired.length, 0,
-          "and naming one is not a repair — in: " + JSON.stringify(r));
-      }
-    }
-
-    /* what a person says about themselves is theirs, and is untouched */
     const own = open("Partner (Equity)", "Founder");
     check(own.ok && own.state.people[0].role === "Founder",
       "a person's own role is carried through exactly, whatever the grade said");
 
-    /* tierRole answers with the grade's NAME, full stop. Asserted against an
-       object that still carries a role, because no tier out of the validator
-       has one — a tierRole that quietly read it again would pass every other
-       test here while putting the removed indirection straight back. */
     eq(M.tierRole({label:"Partner", role:"Partner (Equity)"}), "Partner",
        "tierRole reads the grade's name and ignores any role left on the object");
     eq(M.tierRole({label:"Partner"}), "Partner", "with or without one there");
     eq(M.tierRole(null), "", "and a missing grade prints nothing rather than throwing");
 
-    /* renaming the grade moves the title of everyone using the fallback */
     const st = open(undefined, "");
     if(st.ok){
       st.state.tiers[0].label = "Partners";
@@ -763,23 +402,13 @@ try{
     }
   }
 
-  /* --------------------------------------------- 4. opening twice is stable */
-
-  /* A roster this build saved is opened by this build again, constantly. The
-     second open has to produce the same document as the first, or a file drifts
-     a little every time it is touched. Ids are excluded because the validator
-     deliberately issues fresh ones on every open — what must not move is
-     everything those ids point AT, so people are compared by the position of
-     the grade they belong to rather than by its id. */
   const shape = (st) => {
     const at = {};
     const tiers = st.tiers.map((t, i) => {
       at[t.id] = i;
       const c = Object.assign({}, t); delete c.id; return c;
     });
-    /* groups get fresh ids on every open exactly like tiers do, so they are
-       excluded from the comparison the same way — by position — rather than
-       by the id itself, which the validator is free to change every time. */
+
     const gat = {};
     const groups = (st.groups || []).map((g, i) => {
       gat[g.id] = i;
@@ -794,28 +423,20 @@ try{
   };
   for(const name of VALID.concat(HOSTILE)){
     const once = M.parseAndValidateRoster(load(name));
-    if(!once.ok) continue;              // a refused file never reaches a second open
+    if(!once.ok) continue;
     const twice = M.parseAndValidateRoster(JSON.stringify(once.state));
     check(twice.ok, name + ".json reopens after a round trip"
       + (twice.ok ? "" : " — refused: " + twice.reason));
     if(twice.ok){
       eq(shape(twice.state), shape(once.state),
         "opening " + name + ".json twice gives the same document");
-      /* the sharper half: the first open already normalised everything, so the
-         second has nothing left to repair. A validator that repaired on every
-         pass would satisfy the comparison above and still be wrong. */
+
       eq(twice.repaired.length, 0,
         "and the second open finds nothing to repair in " + name + ".json — got "
         + JSON.stringify(twice.repaired));
     }
   }
 
-  /* ---------------------------------------------------------- 5. angle normalisation */
-
-  /* angleIndex has no word map: any number clamps and rounds into range, and
-     anything that is not a number — whatever word or shape it takes — falls
-     back to 2. The 0 case is the one most at risk of being silently treated
-     as "empty" and replaced — see test/MANUAL.md's pyramid-zero.json note. */
   for(const [input, want] of [[0,0],[1,1],[2,2],[3,3],[4,4],
                               [-5,0],[42,4],[2.4,2],[2.6,3]]){
     eq(M.angleIndex(input), want, "angleIndex(" + JSON.stringify(input) + ")");
@@ -824,20 +445,8 @@ try{
     eq(M.angleIndex(input), 2, "angleIndex(" + JSON.stringify(input) + ") falls back to 2 — no word is recognised");
   }
 
-  /* ---------------------------------------------------------- 6. the roster panel builds */
-
-  /* renderRoster is where a document's people become markup, and it is the
-     largest body of code no other suite touches: test/dom.js reads it
-     statically, and the harness stops at computeLayout. So it is built here
-     against a DOM small enough to reason about — enough to prove the panel
-     assembles, carries its delegated verbs, and puts hostile text where only
-     .textContent and .value can reach it. */
   {
-    /* syncRowIdentity addresses each control by its verb and the person's id, so the
-       stub has to resolve `[data-act="…"][data-id="…"]` rather than shrug. It is
-       deliberately strict: a selector shape it does not implement throws, where
-       returning null would be indistinguishable from a label the app decided
-       not to write — which is exactly the bug these tests exist to catch. */
+
     function selMatch(n, sel){
       const m = /^(?:\.([A-Za-z0-9_-]+))?((?:\[[a-z-]+="[^"]*"\])*)$/.exec(sel);
       if(!m || (!m[1] && !m[2])) throw new Error("stub querySelector: unsupported selector " + sel);
@@ -954,63 +563,34 @@ try{
     `;
     const R = new Function("makeNode",
       DOC +
-      /* LAYOUTS: gradePanelBody reads its per-layout wording (surface, align)
-         off it now instead of comparing state.layout to a literal. */
+
       ["ZOOM_MAX","ENUMS","LIMITS","HEX6","SVGNS","uid","LAYOUTS"].map(grabConst).join("\n") + "\n" +
       ["validatePhoto","oneOf","clampText","isPlainObject","initials","codeParts","tierRole",
        "frameRect","frameLimit","clampFrame","normalizeGradeLinks","el","icon","clear","fill","fillTierOptions",
        "personLabel","framePanel","syncFramePreview","placeFramePreview",
-       /* gradePanelBody's own disabled-reason sentence for the People row,
-          shared with Angle's own reason in syncStyleSummaries */
+
        "notAvailableIn",
-       /* the arrows' enabled state and wording are resolved, not passed in: both
-          row renderers ask moveTarget what the press would actually do */
+
        "gradeName","moveTarget","moveAffordance","personRowName","personRow","personMenuBody",
-       /* the roster search: the match policy, the "is a filter active" gate
-          moveAffordance and the row drag surface both read, and the function
-          every add route calls on open — grabbed real so this harness proves
-          they exist and behave rather than describing them */
+
        "rosterFiltered","personMatches","clearRosterSearch",
-       /* the Edit dialog's photo section — the one part of that dialog built
-          from script, because it is the one part with two states */
+
        "editPhotoBody","syncEditPhoto","editPerson",
-       /* the row outlives the render that named it, and so do the menu and the
-          dialog opened on the same person — this is what keeps all three
-          current while the name is typed in a field none of them contains */
+
        "syncRowIdentity",
        "gradeChip","gradePanelBody",
        "focusedField","restoreField","syncGradePanel",
-       /* syncStructureAvailability drives the Add people dialog's own enabled
-          state as well as the ribbon's, so its helper comes along or every
-          render is a ReferenceError */
+
        "setCommandDisabled","syncAddAvailability","syncStructureAvailability",
-       /* renderRoster calls both, and in this harness both return on their first
-          line: render() shuts the menu and the dialog before rendering, because
-          the popups are built directly here rather than opened. Grabbed rather
-          than stubbed so a guard lost from either is a ReferenceError in this
-          suite rather than silence. */
+
        "syncPersonMenu","syncEditModal","renderRoster",
-       /* syncEditModal reads a person's group back through groupLabel — the
-          #editGroup field is populated from it now instead of a raw
-          `.office` string. */
+
        "newGroup","resolveGroupId","groupLabel","pruneGroups"]
         .map(grabFn).join("\n") + "\n" +
       grabConst("PREVIEW_R") + "\n" +
-      /* No chip is open in this harness, so syncGradePanel returns on its first
-         line and never reaches for #gradePanel — which $() above does not serve.
-         The declaration still has to exist or the call is a ReferenceError. */
+
       "let state = null, gradeOpen = null, personOpen = null, editId = null, rosterQuery = \"\";\n" +
-      /* The strip only holds chips now; every editable control moved into the
-         panel that a chip opens. openGradePanel() is not grabbed — it reaches for
-         #gradePanel and measures it — so the body is built directly, which is the
-         part that emits the verbs and the accessible names being checked. */
-      /* The menu and the photo section are built into the hosts the stub's
-         document searches, because that is what makes the relabelling
-         assertions able to reach them — the same reason the roster is rendered
-         into HOSTS.roster rather than into a throwaway. openPersonMenu and
-         openEditModal are not grabbed: both measure and place things this stub
-         has no geometry for, and neither is what emits the verbs and the names
-         being checked. */
+
       "return {HOSTS, LAYOUTS, render(s, open){ state = s; this.shut(); renderRoster(); if(open) this.menu(s, open); },\n" +
       "        menu(s, id){ state = s; personOpen = id;\n" +
       "          return fill(HOSTS.personMenu, [personMenuBody(state.people.find(p=>p.id===id))]); },\n" +
@@ -1020,13 +600,11 @@ try{
       "        shut(){ personOpen = null; editId = null; clear(HOSTS.personMenu); clear(HOSTS.editPhoto); },\n" +
       "        sync(p){ return syncRowIdentity(p); },\n" +
       "        panel(s, i){ state = s; return fill(el('div'), [gradePanelBody(s.tiers[i], i)]); },\n" +
-      /* The one way a test sets the query: rosterQuery is a free variable
-         inside this constructed module, invisible from outside it otherwise. */
+
       "        query(v){ rosterQuery = v; },\n" +
       "        writes(){ return historyWrites; }};"
     )(node);
 
-    /* walk the built tree */
     function walk(n, fn){ fn(n); for(const c of n.children) walk(c, fn); }
     function collect(n, pick){
       const out = [];
@@ -1034,7 +612,7 @@ try{
       return out;
     }
 
-    const st = fresh("injection");            // the worst input, through the real renderer
+    const st = fresh("injection");
     R.render(st, null);
     const roster = R.HOSTS.roster, tiers = R.HOSTS.tiers;
 
@@ -1042,9 +620,6 @@ try{
     check(tiers.children.length === st.tiers.length,
       "one grade card per grade — got " + tiers.children.length + ", want " + st.tiers.length);
 
-    /* zero grades: the strip names itself instead of staying blank — the
-       first thing every new document shows now that defaults() ships with no
-       grades at all. */
     {
       const zero = Object.assign({}, st, {tiers: []});
       R.render(zero, null);
@@ -1059,25 +634,17 @@ try{
       check(ph && !("aria-hidden" in (ph.attrs || {})),
         "…and no aria-hidden — a screenreader should read the state");
 
-      /* the muted look, read from the app's own stylesheet — the same
-         technique §6e uses below to settle pointer-events and display,
-         rather than trusting a JS property that could disagree with what is
-         actually painted. */
       const rule = /\.empty,\.tiers-empty\{([^}]*)\}/.exec(HTML);
       check(!!rule, "the .empty / .tiers-empty rule is found in the stylesheet");
       check(rule && rule[1].indexOf("color:var(--mute)") >= 0,
         "…and it genuinely carries the roster's own .empty declaration, not a "
         + "lookalike copy — got " + JSON.stringify(rule && rule[1]));
 
-      // restore: with grades present, no placeholder survives the render
       R.render(st, null);
       check(R.HOSTS.tiers.children.every(c => c.className !== "tiers-empty"),
         "with grades present, no placeholder is emitted");
     }
 
-    /* the delegated verbs the collapsed panel must emit — and, just as much,
-       the ones it must not. A row is one caret now; anything else emitted from
-       inside it is a control back on the surface the next prompt needs. */
     const acts = collect(roster, x => x.dataset.act);
     for(const verb of ["menu","addTo"]){
       check(acts.indexOf(verb) >= 0, "the roster emits data-act=\"" + verb + '"');
@@ -1086,8 +653,7 @@ try{
       check(acts.indexOf(verb) < 0,
         'the roster does NOT emit data-act="' + verb + '" — that control left the row');
     }
-    /* One caret per person and nothing else focusable: counted against the
-       fixture's own headcount rather than a number written here. */
+
     {
       const rows = collect(roster, x => /\bp-row\b/.test(String(x.className||"")) ? x : null);
       eq(rows.length, st.people.length, "one row per person");
@@ -1105,35 +671,8 @@ try{
       }
     }
 
-    /* ---- what makes an element grabbable, asserted as a class ---------------
-       The roster shipped draggable handles inside a row that carried no
-       data-id, and every suite stayed green: §6h builds its own rows and writes
-       the id in itself, so the harness supplied the very thing the renderer had
-       left out. Nothing here may name .p-row or .g-chip, then — a two-item list
-       guards the two surfaces that exist and misses the third.
-
-       The rule instead: `draggable` says WHAT may be grabbed, and the id on the
-       UNIT says WHO was grabbed. The unit is whatever that surface's dragstart
-       hands to closest(), and it is not the handle — .thumb and .p-name carry
-       ids of their own for syncRowIdentity, so "the nearest data-id above the
-       handle" is answered by the handle itself and would have stayed green
-       through the entire bug. A unit with no id produces `undefined`: dragover
-       returns at its first line and markRowDrop compares undefined against
-       undefined and calls every row the dragged one. Nothing lifts, on either
-       path, on every platform.
-
-       Two sources, neither of them the builder being judged: the UNITS come out
-       of the app's own dragstart handlers (the selector each one hands to
-       closest, and the container it is bound to), and the HANDLES come out of
-       the rendered tree. A third draggable surface rendered here with no unit
-       over it, or with a unit the handlers do not look for, fails without being
-       listed. */
     {
-      /* Read the wiring, not the markup. Both drag surfaces now share one
-         function, makeDragSurface, so the host and the unit it drags no
-         longer sit together in a literal dragstart body — they are the
-         `root` and `itemSelector` of each surface's own instantiation
-         statement, which is what this reads instead. */
+
       const UNITS = {};
       for(const name of ["rowDragSurface", "gradeDragSurface"]){
         const stmt = new RegExp("const " + name + " = makeDragSurface\\(\\{[\\s\\S]*?\\n\\}\\);").exec(HTML);
@@ -1151,9 +690,7 @@ try{
         check(!!root, 'the rendered tree includes #' + host
           + ", which the app binds a dragstart handler to");
         if(!root) continue;
-        /* closest(), with no parent pointers: carry the innermost
-           ancestor-or-self matching the host's unit selector down the tree, so
-           each handle can be asked what its dragstart would have found. */
+
         const want = UNITS[host];
         const handles = [];
         (function descend(n, unit){
@@ -1175,9 +712,6 @@ try{
         }
       }
 
-      /* And the id is the thing the drop will act on, not merely present:
-         checked against the fixture's own people and grades, which is a
-         different source from the renderer that wrote it. */
       const unitIds = (host, sel) => {
         const out = [];
         (function descend(n, unit){
@@ -1195,20 +729,12 @@ try{
         "and each strip drag unit names a grade in the fixture — got " + JSON.stringify(chipIds));
     }
 
-    /* ---- the "+" on each group heading, in the rendered tree ---------------
-       test/dom.js reads the source; this is the only suite that RENDERS the
-       roster, and it is where "the button is actually in the tree, once per
-       heading, naming its own grade" can be asserted. Without this, deleting the
-       button outright removed four assertions from the per-control loop below
-       instead of failing anything — counts measure calls, not coverage. */
     {
       const adds = collect(roster,
         x => x.dataset.act === "addTo" ? {id:x.dataset.id, cls:x.className,
                                           label:x.attrs["aria-label"], kids:x.children.length}
                                        : null);
-      /* One per heading, and a heading exists only for a grade with people —
-         computed from the fixture rather than hard-coded, so the count follows
-         the roster instead of pinning this one file's shape. */
+
       const peopled = st.tiers.filter(t => st.people.some(p => p.tierId === t.id));
       check(peopled.length > 0, "injection.json has at least one grade with people in it");
       eq(adds.length, peopled.length,
@@ -1216,10 +742,7 @@ try{
         + adds.length + ", want " + peopled.length);
       check(adds.every(a => peopled.some(t => t.id === a.id)),
         "each one carries the id of a grade that actually has a heading");
-      /* Names the GRADE, not a person — the roster's other icon buttons all name
-         a person, and an icon-only button announced as "button" is the failure
-         this whole area exists for. Compared against the grade's own label read
-         off the fixture, which is a different source from the renderer. */
+
       for(const a of adds){
         const t = peopled.find(x => x.id === a.id) || {};
         eq(a.label, "Add someone to " + t.label,
@@ -1229,7 +752,7 @@ try{
       check(adds.every(a => /\bth-add\b/.test(a.cls)),
         "…and carries the heading class the stylesheet centres it with");
     }
-    /* injection.json's grades, through the panel that now holds their controls */
+
     const tacts = collect(tiers, x => x.dataset.tact)
       .concat(st.tiers.map((t, i) => collect(R.panel(st, i), x => x.dataset.tact))
                       .reduce((a, b) => a.concat(b), []));
@@ -1237,9 +760,6 @@ try{
       check(tacts.indexOf(verb) >= 0, 'the grade editor emits data-tact="' + verb + '"');
     }
 
-    /* The hostile name must exist exactly once, and as TEXT — the row shows it
-       rather than holding it in a field now, so the escaping question moved
-       from .value to .textContent and the answer has to move with it. */
     const evilName = '<script>alert("name")</script>';
     const rowTexts = collect(roster, x => x.textContent);
     eq(rowTexts.filter(v => v === evilName).length, 1,
@@ -1249,16 +769,12 @@ try{
     check(collect(roster, x => x.tagName === "script" ? "script" : null).length === 0,
       "no script element was constructed from roster text");
 
-    /* a photo that failed validation must never reach an img src */
     const srcs = collect(roster, x => x.src);
     for(const s of srcs){
       check(/^data:image\/(jpeg|png);base64,/.test(s),
         "a thumbnail src is an embedded image, not a URL — got " + String(s).slice(0, 40));
     }
 
-    /* ---- what the caret opens, and what the dialog's photo section is ------
-       Neither lives inside the row, so both are built directly, exactly as
-       the grade panel's body is. */
     const withPhoto = st.people.find(p => p.photo);
     check(!!withPhoto, "injection.json still has one person with a usable photo");
     if(withPhoto){
@@ -1271,7 +787,6 @@ try{
       eq(roles.filter(r => r === "menuitem").length, 4,
         "each of the four is announced as a menu item");
 
-      /* with a photo, the section IS the framing editor */
       const facts = collect(R.photo(st, withPhoto.id), x => x.dataset.fact);
       for(const verb of ["pan","zoom","reset","replace","remove"]){
         check(facts.indexOf(verb) >= 0, 'the framing editor emits data-fact="' + verb + '"');
@@ -1279,10 +794,6 @@ try{
       check(collect(R.HOSTS.editPhoto, x => x.dataset.act).indexOf("photo") < 0,
         "…and offers no Add photo beside it — there is already one to work on");
 
-      /* Two buttons on screen at once both read "remove"-ish and do very
-         different things: one takes the picture away, the other takes the
-         person out of the document. Their accessible names are the only thing
-         that tells them apart, so assert both, together. */
       const openNames = collect(R.HOSTS.editPhoto, x => x.attrs["aria-label"])
         .concat(collect(R.HOSTS.personMenu, x => x.attrs["aria-label"]));
       const whoLabel = (withPhoto.name && withPhoto.name.trim()) || "the unnamed person";
@@ -1294,15 +805,12 @@ try{
       R.shut();
     }
 
-    /* The other state of the same section: somebody who has never had a photo.
-       No framing editor at all, so every fact is absent — and the one way in
-       has to be there instead, or that person can never get a picture. */
     {
       const bare = fresh("unicode");
       const who  = bare.people.find(p => !p.photo);
       check(!!who, "the unicode fixture still has a person with no photo");
       if(who){
-        who.name = "Ada Lovelace";        // so the letters can be written out here
+        who.name = "Ada Lovelace";
         const built = R.photo(bare, who.id);
         eq(collect(built, x => x.dataset.fact).length, 0,
           "a photo-less person gets no framing editor at all");
@@ -1316,11 +824,6 @@ try{
       }
     }
 
-    /* the grade picker is the dialog's, and it is static markup — what this
-       suite can still assert is that fillTierOptions lists every grade, which
-       it does through the panel builder above and the roster's own use of it */
-
-    /* a photo-less roster still renders, and an empty one says so */
     R.render(fresh("unicode"), null);
     check(R.HOSTS.roster.children.length > 0, "a photo-less roster renders");
     const empty = fresh("current"); empty.people = [];
@@ -1329,10 +832,6 @@ try{
     check(/Nobody yet/.test(R.HOSTS.roster.children[0].textContent),
       "the empty placeholder says so in words");
 
-    /* ---- accessible names ------------------------------------------------
-       An icon-only button announced as "button", or eleven identical "move up"
-       items, is the difference between usable and not. The names have to name
-       the person they act on. */
     const named = fresh("current");
     const target = named.people[0];
     R.render(named, target.id);
@@ -1351,9 +850,7 @@ try{
     }
     check(names.some(n => /arrow keys to nudge/.test(n)),
       "the framing circle mentions its keyboard path");
-    /* The row's own two pieces of text say nothing to a screenreader — the
-       thumbnail is aria-hidden and the name is the name — so the caret is the
-       only thing in the row that can carry a name, and it must. */
+
     {
       const carets = collect(R.HOSTS.roster,
         x => x.dataset.act === "menu" ? x.attrs["aria-label"] : null);
@@ -1361,7 +858,6 @@ try{
       check(carets.every(n => /^Actions for /.test(n)), "…and every one of them says whose");
     }
 
-    /* a person with no name still gets a usable one rather than "'s photo" */
     const anon = fresh("current");
     anon.people[0].name = "";
     R.render(anon, anon.people[0].id);
@@ -1373,9 +869,7 @@ try{
       "an unnamed person is described, not left as an empty string");
     check(!anonNames.some(n => /^Move  /.test(n) || /^Remove  /.test(n)),
       "no accessible name collapses to a double space where the name should be");
-    /* …and the ROW shows something else again. personLabel is written for a
-       sentence and reads as nonsense on a line of its own, which is why the two
-       are separate writers rather than one. */
+
     {
       const line = collect(R.HOSTS.roster,
         x => /\bp-name\b/.test(String(x.className||"")) ? x : null)[0];
@@ -1386,26 +880,6 @@ try{
     }
     R.shut();
 
-    /* ---- names survive a rename ------------------------------------------
-       Every name above was written by the render that built the row, and typing
-       a name deliberately does not re-render the roster — so without
-       syncRowIdentity all of them go on announcing whoever the row was rendered
-       for, which for a freshly added person is "the unnamed person" on every
-       control of every row. The name is typed in a dialog now and the things it
-       names are behind it, which makes this worse rather than better: the field
-       and everything it describes are in different boxes.
-
-       The assertion that matters is not that the labels changed. It is that
-       they became exactly what a fresh render would have written: relabelling
-       that drifts from the renderer is just a second source for the same
-       strings, and drift there is invisible — the names still look plausible. */
-    /* Keyed by verb where there is one and by class where there is not. The
-       verb-only version could not fail the "and no others" count below: every
-       control the renderer builds is labelled at build time, so a label the
-       SYNC adds on top could only show up on a node the renderer leaves bare —
-       and the two such nodes in a row, the thumbnail and the name, carry a
-       data-id and no verb. Without them in here the count compared a set with
-       itself. */
     function labelMap(root){
       const out = {};
       walk(root, x => {
@@ -1421,7 +895,7 @@ try{
     for(const open of [true, false]){
       const where = open ? "with the menu and the dialog open" : "with the row alone";
       const doc = fresh("injection");
-      // the person with a photo, so the framing controls are in the tree too
+
       const subject = doc.people.find(p => p.photo) || doc.people[0];
       subject.name = "";
       R.render(doc, null);
@@ -1437,8 +911,6 @@ try{
       check(keysOfSubject.some(k => /the unnamed person/.test(before[k])),
         where + ": starts out announcing the unnamed fallback");
 
-      /* the rename, and the relabel that follows it in the dialog's own input
-         handler — no re-render, so these are the very same nodes */
       subject.name = NEW_NAME;
       R.sync(subject);
 
@@ -1452,12 +924,10 @@ try{
       check(personal.every(k => after[k].indexOf(NEW_NAME) >= 0),
         where + ": names the person in every one of their controls");
 
-      /* nobody else's row was touched */
       for(const k of Object.keys(before)){
         if(!mine(k)) eq(after[k], before[k], where + ": another person's " + k + " is left alone");
       }
 
-      /* and the labels equal what the renderer would have written */
       R.render(doc, null);
       if(open){ R.menu(doc, subject.id); R.photo(doc, subject.id); }
       const rendered = Object.assign(labelMap(R.HOSTS.roster),
@@ -1472,8 +942,6 @@ try{
       R.shut();
     }
 
-    /* the move items keep their destination grade, which is the one label that
-       is not a plain "verb + name" and the one worth not rebuilding here */
     {
       const doc = fresh("injection");
       const t0 = doc.tiers[0], t1 = doc.tiers[1];
@@ -1481,7 +949,7 @@ try{
       subject.tierId = t0.id;
       subject.name = "";
       doc.people = [subject].concat(doc.people.slice(1).map(p => {
-        p.tierId = t1.id; return p;                 // everyone else is one grade down
+        p.tierId = t1.id; return p;
       }));
       R.render(doc, null);
       R.menu(doc, subject.id);
@@ -1500,27 +968,15 @@ try{
       R.shut();
     }
 
-    /* ---- the row's two pieces of visible text follow the name too ----------
-       The initials and the line beside them are what the eye reads, and both
-       lagged a rename in exactly the way the accessible names did — worse,
-       because a row reading "AL / Ada Lovelace" beside a dialog field reading
-       "Grace Hopper" is wrong on screen for everyone, not only to a
-       screenreader. Same rule and same constraint: the node that was there
-       before must be the node that is corrected, because the row is behind a
-       dialog whose field is being typed in. */
     const thumbOf = id => R.HOSTS.roster.querySelector('.thumb[data-id="' + id + '"]');
     const lineOf  = id => R.HOSTS.roster.querySelector('.p-name[data-id="' + id + '"]');
     {
       const doc = fresh("injection");
       const subject = doc.people[0];
-      subject.photo = null;                    // the initials case, not the image case
+      subject.photo = null;
       subject.name = "Ada Lovelace";
       R.render(doc, null);
 
-      /* Read through a default at every step. A mutation that removes the
-         thumbnail leaves thumbOf() null, and reaching .textContent off it throws
-         — which abandons the rest of this section instead of failing it, and a
-         mutation that throws is not a pass. */
       const txt = n => (n || {}).textContent;
       const thumb = thumbOf(subject.id), line = lineOf(subject.id);
       check(!!thumb, "a photo-less person has a thumbnail");
@@ -1535,7 +991,6 @@ try{
       check(thumbOf(subject.id) === thumb && lineOf(subject.id) === line,
         "on the very same DOM nodes — nothing was rebuilt to achieve it");
 
-      /* and they agree with the renderer rather than merely looking right */
       R.render(doc, null);
       const redrawn = thumbOf(subject.id), redrawnLine = lineOf(subject.id);
       check(redrawn !== thumb, "a fresh render does build a new node (so the comparison is worth making)");
@@ -1544,8 +999,6 @@ try{
       eq(txt(line), txt(redrawnLine),
         "and so is the in-place line");
 
-      /* clearing the name must land on the renderer's fallback, not stall on
-         the last initials it happened to be showing */
       subject.name = "";
       const cleared = thumbOf(subject.id), clearedLine = lineOf(subject.id);
       R.sync(subject);
@@ -1561,10 +1014,7 @@ try{
         "…and takes back the muted class with it, which a textContent-only repair would leave off");
     }
     {
-      /* With a photo the thumbnail holds an <img> and no text. In a browser,
-         assigning textContent there deletes that image; this stub keeps its
-         children, so the assertion that actually guards the image is the one
-         on textContent staying empty. Both are checked. */
+
       const doc = fresh("injection");
       const subject = doc.people.find(p => p.photo);
       check(!!subject, "injection.json still has a person with a usable photo");
@@ -1590,14 +1040,8 @@ try{
       R.shut();
     }
 
-    /* these blocks borrowed the host to render other documents into — put back
-       the one the grade-editor assertions below still expect to be showing */
     R.render(named, null);
 
-    /* ---- the grade editor ------------------------------------------------ */
-    /* The strip is chips: a code, a name and a caret, and nothing editable —
-       nine controls per grade do not fit the ribbon's fixed height, so they
-       live in a per-grade panel instead. */
     const first = named.tiers[0], second = named.tiers[1];
     const chipNames = collect(R.HOSTS.tiers, x => x.attrs["aria-label"]);
     check(chipNames.some(n => n === "Grade " + first.label + " — open settings"),
@@ -1612,10 +1056,7 @@ try{
     const chipText = collect(chip0, x => x.textContent);
     check(chipText.indexOf(first.code) >= 0 && chipText.indexOf(first.label) >= 0,
       "the chip shows the grade's code and its name — got " + JSON.stringify(chipText));
-    /* The chip is a split now: a drag handle plus a caret. The state belongs to
-       the caret, because the caret is what opens the panel — asserting it on the
-       wrapper would pass while the button announcing itself to a screenreader
-       said nothing at all. */
+
     const toggle0 = collect(chip0, x =>
       String(x.className||"").indexOf("g-chip-toggle") >= 0 ? x : null)[0];
     check(!!toggle0, "the chip carries a caret button beside its drag handle");
@@ -1630,7 +1071,6 @@ try{
     check(face0 && !face0.dataset.tact && face0.draggable === true,
       "the face drags and does nothing on click, so one gesture cannot do both");
 
-    /* the panel behind chip 0 */
     const panel0 = R.panel(named, 0), panel1 = R.panel(named, 1);
     const tierNames = collect(panel0, x => x.attrs["aria-label"])
       .concat(collect(panel1, x => x.attrs["aria-label"]));
@@ -1640,7 +1080,7 @@ try{
       "the first grade explains why attach and share are unavailable");
     check(tierNames.some(n => n.indexOf("Attach " + second.label) === 0),
       "a later grade's attach names both grades");
-    /* the panel must still emit every verb the grade editor exposes */
+
     const panelVerbs = [];
     walk(panel0, x => { if(x.dataset.tact) panelVerbs.push(x.dataset.tact); });
     for(const v of ["code","label","fill","align","attach","merge","up","down","del"]){
@@ -1648,8 +1088,6 @@ try{
         'the panel still emits data-tact="' + v + '" — got ' + JSON.stringify(panelVerbs));
     }
 
-    /* the toggles on the first grade must actually be disabled, not just
-       described as unavailable */
     const links = (p) => { const out = []; walk(p, x => {
         if(x.tagName === "button" && (x.dataset.tact === "attach"
            || x.dataset.tact === "merge")) out.push(x); }); return out; };
@@ -1662,18 +1100,13 @@ try{
     const boxes2 = links(panel1);
     check(boxes2.length === 2 && boxes2.every(b => b.disabled === false),
       "the second grade's options are available");
-    /* the pressed state is the grade's own flag, not a fixed attribute. The
-       fixture's second grade attaches without sharing, which is the one
-       combination that tells the two apart. */
+
     const flags = {attach: named.tiers[1].attach, merge: named.tiers[1].merge};
     check(boxes2.every(b => b.attrs["aria-pressed"] === String(!!flags[b.dataset.tact])),
       "and each shows the flag it writes — attach " + flags.attach
       + ", share " + flags.merge + ", got "
       + JSON.stringify(boxes2.map(b => b.dataset.tact + "=" + b.attrs["aria-pressed"])));
 
-    /* Reordering reads as left/right, because that is how the chips are laid
-       out — but the verbs stay up/down, which is the direction in state.tiers
-       that the chart reads top-down. Swap the verbs and move() reverses. */
     const moves = [];
     walk(panel1, x => { if(x.dataset.tact === "up" || x.dataset.tact === "down")
                           moves.push([x.dataset.tact, x.attrs["aria-label"]]); });
@@ -1685,7 +1118,6 @@ try{
                           && /bottom of the chart/.test(m[1])),
       'and "down" as Right — got ' + JSON.stringify(moves));
 
-    /* the last grade cannot move further right, the first cannot move left */
     const lastPanel = R.panel(named, named.tiers.length - 1);
     const lastMoves = {};
     walk(lastPanel, x => { if(x.dataset.tact === "up" || x.dataset.tact === "down")
@@ -1698,7 +1130,6 @@ try{
     check(firstMoves.up === true && firstMoves.down === false,
       "and the top grade's Left is disabled while its Right is not");
 
-    /* visible text stays words, not initials */
     const texts = collect(panel1, x => x.textContent);
     check(texts.indexOf("Attach to left") >= 0,
       'the visible label says what Attach does');
@@ -1709,10 +1140,7 @@ try{
     check(texts.indexOf("Border only") >= 0 && texts.indexOf("Only border") < 0,
       "the outline fill is faced Border only — noun first, like every other face "
       + "in the panel");
-    /* The People row as it is actually BUILT, in order: left, centre, right is
-       where the three answers put people on the band, read left to right. The
-       source-order check in test/dom.js reads the call site; this one reads the
-       elements that came out of it. */
+
     const alignOrder = [];
     walk(panel1, x => { if(x.dataset.tact === "align")
                           alignOrder.push(x.attrs["data-value"]); });
@@ -1723,11 +1151,7 @@ try{
                           fillOrder.push(x.attrs["data-value"]); });
     check(fillOrder.join(",") === "green,white",
       "and Fill is built Accent, Border only — got " + JSON.stringify(fillOrder));
-    /* The face of a toggle this narrow cannot carry the whole sentence, so the
-       surface it acts on — a band in Pyramid, a lane in Swimlanes — moved to the
-       accessible name and the tooltip. That is the half that has to follow the
-       layout: a Swimlanes user reading "band" is being told about geometry the
-       chart does not have. */
+
     const laneState = JSON.parse(JSON.stringify(named));
     laneState.layout = "swimlanes";
     const lanePanel = R.panel(laneState, 1);
@@ -1744,14 +1168,6 @@ try{
       "while the pyramid names a band — got "
       + JSON.stringify(bandShare[0] && bandShare[0].attrs["aria-label"]));
 
-    /* Same layout-follows-surface mechanic applies to the reorder buttons, the
-       first grade's attach reason, and the fill radiogroup's own name — none
-       of them may keep saying "chart"/"above"/"Band" once the grades read as
-       a row of lanes rather than a stack of bands. Every read below goes
-       through R.panel(), the app's own builder, against laneState — the same
-       clone the check above already made — so a mutation to gradePanelBody's
-       strings is what turns one of these red, not an edit to this file's own
-       setup. */
     const laneMoves = [];
     walk(lanePanel, x => { if(x.dataset.tact === "up" || x.dataset.tact === "down")
                              laneMoves.push({tact:x.dataset.tact, title:x.title || "",
@@ -1775,8 +1191,6 @@ try{
       "while the Pyramid panel's own reorder buttons still name the chart — got "
       + JSON.stringify(pyramidMoveTitles));
 
-    /* The first grade's attach reason names the direction the grades actually
-       run in — "before" in a row of lanes, "above" in a stack of bands. */
     const lanePanel0 = R.panel(laneState, 0);
     const laneAttach0 = links(lanePanel0).filter(b => b.dataset.tact === "attach")[0];
     check(laneAttach0 && /nothing before it/.test(laneAttach0.title)
@@ -1789,7 +1203,6 @@ try{
       "while the first band keeps \"above\" — got "
       + JSON.stringify(bandAttach0 && bandAttach0.title));
 
-    /* The fill radiogroup's own accessible name follows the same switch. */
     const laneFillLabels = collect(lanePanel, x =>
       (x.attrs && x.attrs.role === "radiogroup") ? x.attrs["aria-label"] : null);
     check(laneFillLabels.some(l => /^Lane fill for /.test(l)),
@@ -1801,8 +1214,6 @@ try{
       "while the Pyramid fill radiogroup keeps Band — got "
       + JSON.stringify(bandFillLabels));
 
-    /* Each fill option's own tooltip names the surface too, not just the
-       radiogroup wrapping them. */
     const laneFillTitles = [];
     walk(lanePanel, x => { if(x.dataset.tact === "fill") laneFillTitles.push(x.title || ""); });
     check(laneFillTitles.length === 2 && laneFillTitles.every(t => /\blane\b/.test(t))
@@ -1815,18 +1226,6 @@ try{
       "while the Pyramid fill options keep band — got "
       + JSON.stringify(bandFillTitles));
 
-    /* ---- Swimlanes disables People without resetting it -------------------
-       computeTriangleLayout reads t.align — both triangle engines, Pyramid
-       AND Tornado, share that one solver now. Under Swimlanes (align:false in
-       LAYOUTS) the three buttons below would still commit and still move
-       their own aria-checked while the chart drew nothing different from it,
-       so they go really disabled, the same fix Angle already has, and the
-       stored choice is read straight off the fixture data
-       (laneState.tiers[1].align), not re-derived through the app's own oneOf
-       — a second source for what "still checked" means. The reason names the
-       CURRENT layout off LAYOUTS' own label, read here off R.LAYOUTS rather
-       than hand-typed, so a mutation that hardcodes "Swimlanes" in the app
-       cannot hide behind a test literal that happens to agree with it today. */
     const swimLabel = R.LAYOUTS.swimlanes.label;
     const laneAligns = [];
     walk(lanePanel, x => { if(x.dataset.tact === "align") laneAligns.push(x); });
@@ -1845,11 +1244,6 @@ try{
       "and the radiogroup's own aria-label carries the same reason, lower-cased after the dash — got "
       + JSON.stringify(laneRadiogroup && laneRadiogroup.attrs["aria-label"]));
 
-    /* Second-source proof this is genuinely READ off LAYOUTS.swimlanes.label
-       and not a hard-typed "Swimlanes" that happens to match today's value:
-       doctor the SAME live object gradePanelBody's own closure reads (no
-       re-extraction needed) and rebuild the panel. A hard-typed literal would
-       keep saying "Swimlanes" regardless of what LAYOUTS now states. */
     const savedSwimLabel = R.LAYOUTS.swimlanes.label;
     R.LAYOUTS.swimlanes.label = "Lanes Test";
     const dopedPanel = R.panel(laneState, 1);
@@ -1858,7 +1252,7 @@ try{
     check(dopedAligns.length === 3 && dopedAligns.every(b => b?.title === "Not available in Lanes Test"),
       "and the reason follows a doctored LAYOUTS.swimlanes.label rather than a hard-typed "
       + "\"Swimlanes\" — got " + JSON.stringify(dopedAligns.map(b => b?.title)));
-    R.LAYOUTS.swimlanes.label = savedSwimLabel;         // restore for every assertion after this one
+    R.LAYOUTS.swimlanes.label = savedSwimLabel;
 
     const laneAlignNow = laneState.tiers[1].align;
     check(laneAligns.every(b =>
@@ -1867,8 +1261,6 @@ try{
       + "disabling — got "
       + JSON.stringify(laneAligns.map(b => b?.attrs?.["data-value"] + "=" + b?.attrs?.["aria-checked"])));
 
-    /* Hive shares Swimlanes' align:false row shape — the same disable, the
-       same literal reason, checked the same way. */
     const hiveState = JSON.parse(JSON.stringify(named));
     hiveState.layout = "hive";
     const hivePanel = R.panel(hiveState, 1);
@@ -1901,8 +1293,6 @@ try{
       "and the stored choice (" + bandAlignNow + ") is still visibly checked under Pyramid too — got "
       + JSON.stringify(bandAligns.map(b => b?.attrs?.["data-value"] + "=" + b?.attrs?.["aria-checked"])));
 
-    /* Tornado shares the triangle solver's t.align read, so People stays live
-       there too — not just under Pyramid. */
     const tornadoState = JSON.parse(JSON.stringify(named));
     tornadoState.layout = "tornado";
     const tornadoPanel = R.panel(tornadoState, 1);
@@ -1913,10 +1303,6 @@ try{
       "and all three stay live under Tornado too — got "
       + JSON.stringify(tornadoAligns.map(b => b?.disabled)));
 
-    /* Histogram's People row positions the BAND rather than people within
-       one, but LAYOUTS.histogram.align is still true, so the row must stay
-       exactly as live as Pyramid's and Tornado's — the new angle:false/
-       align:true pair is not "disable everything Angle disables". */
     const histogramState = JSON.parse(JSON.stringify(named));
     histogramState.layout = "histogram";
     const histogramPanel = R.panel(histogramState, 1);
@@ -1927,11 +1313,6 @@ try{
       "and all three stay live under Histogram too — got "
       + JSON.stringify(histogramAligns.map(b => b?.disabled)));
 
-    /* ---- a finished grade rename refreshes the roster -------------------
-       A grade's code and label appear in the roster panel's group heading,
-       in the grade picker inside every open person row, in the role
-       placeholder and in the accessible name of every control on the grade
-       card. All of those must follow a rename, not just the chart. */
     const renamed = fresh("current");
     const tier = renamed.tiers[0];
     const person = renamed.people.find(p => p.tierId === tier.id);
@@ -1945,7 +1326,7 @@ try{
 
     tier.label = "Renamed Grade";
     tier.code  = "RG";
-    R.render(renamed, person.id);     // what onEnd triggers at the end of a session
+    R.render(renamed, person.id);
 
     const heads = collect(R.HOSTS.roster, x =>
       x.className === "nm" ? x.textContent : null);
@@ -1956,33 +1337,23 @@ try{
       x.className === "code" ? x.textContent : null);
     check(codes.indexOf("RG") >= 0, "the group heading's code chip follows too");
 
-    /* The grade list and the role placeholder moved into the Edit dialog, so
-       the rename has to reach THEM now. syncEditModal is what carries it, and it
-       runs from the same renderRoster pass — driven directly here because the
-       dialog's fields are static markup this suite does not build. */
     R.dialog(renamed, person.id);
     const opts = collect(R.HOSTS.editTier, x => x.tagName === "option" ? x.textContent : null);
     check(opts.indexOf("Renamed Grade") >= 0,
       "the dialog's grade picker lists the new name — got " + JSON.stringify(opts));
     eq(opts.length, renamed.tiers.length,
       "…and still lists every grade, which is fillTierOptions' whole job");
-    /* The placeholder in a person's "Role shown on the chart" is what that person
-       WILL print if they type nothing — which is the grade's name, there
-       being no grade-level title in between. So the rename has to reach it too. */
+
     eq(R.HOSTS.editRole.placeholder, "Renamed Grade",
       "the role placeholder follows the grade's name");
     check(R.HOSTS.editRole.placeholder !== "Renamed Role",
       "and there is no grade-level title left to follow instead");
-    /* the fields themselves are written from the person, not left as whatever
-       the last opening put there */
+
     eq(R.HOSTS.editName.value, person.name, "the dialog shows this person's name");
     eq(R.HOSTS.editTier.children.filter(o => o.selected).length, 1,
       "…and their grade is the one selected in the list");
     R.shut();
 
-    /* the chip and the panel it opens both have to follow the rename — the panel
-       is rebuilt by the same renderRoster pass, which is why syncGradePanel()
-       runs there rather than only when a chip is clicked */
     const cardNames = collect(R.HOSTS.tiers, x => x.attrs["aria-label"])
       .concat(collect(R.panel(renamed, 0), x => x.attrs["aria-label"]));
     check(cardNames.some(n => n === "Delete grade Renamed Grade"),
@@ -1995,7 +1366,6 @@ try{
     check(chipText2.indexOf("Renamed Grade") >= 0 && chipText2.indexOf("RG") >= 0,
       "the chip's visible code and name follow too — got " + JSON.stringify(chipText2));
 
-    /* nothing anywhere may still be showing the old name */
     const after = collect(R.HOSTS.roster, x => x.textContent)
       .concat(collect(R.HOSTS.tiers, x => x.textContent))
       .concat(collect(R.HOSTS.tiers, x => x.attrs["aria-label"]))
@@ -2004,18 +1374,6 @@ try{
     check(!after.some(t => t === "Partner" || t === "Delete grade Partner"),
       "no part of the roster is left showing the old grade name");
 
-  /* ------------------------------------------------- 6a2. the roster search */
-
-  /* A hand-built roster rather than a fixture file, shaped so every query
-     below matches exactly one field on exactly one person: a mutation that
-     drops any one of personMatches' five reads (name, p.role, tierRole's
-     fallback, t.code, t.label, groupLabel — five names, one of them a pair)
-     turns exactly one assertion red without disturbing its neighbours.
-     Bo Cache's role is deliberately non-empty specifically so that querying
-     her own grade's label proves t.label is read on its own — for everyone
-     ELSE here role is empty, so their grade's name reaches them only
-     through tierRole's fallback, and the two paths would be indistinguishable
-     if every person's role were blank. */
   {
     function searchDoc(){
       return {
@@ -2038,9 +1396,6 @@ try{
     const namesIn = () => collect(R.HOSTS.roster, x => x.className === "p-name" ? x.textContent : null);
     const headsIn = () => collect(R.HOSTS.roster, x => x.className === "th" ? true : null);
 
-    /* (a) a name query narrows the tree to the matching row, drops the
-       heading of every grade with nothing left, and the surviving heading's
-       own count reflects the FILTERED list, not the grade's real headcount. */
     R.query("Cache");
     R.render(sdoc, null);
     eq(namesIn().join(","), "Bo Cache",
@@ -2050,8 +1405,6 @@ try{
     eq(collect(R.HOSTS.roster, x => x.className === "ct" ? x.textContent : null).join(","), "1",
       "…whose count span reads the filtered size of the grade, not its real headcount");
 
-    /* (b) five queries, five surfaces — name, p.role, tierRole's fallback
-       (role empty), t.code and t.label directly, and groupLabel. */
     function onlyMatching(q){ R.query(q); R.render(sdoc, null); return namesIn().join(","); }
     eq(onlyMatching("Captain"), "Bo Cache", "\"Captain\" matches only through p.role");
     eq(onlyMatching("Partner"), "Ada Byte,Al Adams",
@@ -2063,8 +1416,6 @@ try{
       + "on its own, not only as tierRole's fallback text");
     eq(onlyMatching("Owls"), "Bo Cache", "\"Owls\" matches only through groupLabel(st, p)");
 
-    /* (c) the count line: exact wording while a filter is active, hidden once
-       the query is empty again. */
     R.query("Cache");
     R.render(sdoc, null);
     eq(R.HOSTS.rosterCount.hidden, false, "the count line shows while a filter is active");
@@ -2075,8 +1426,6 @@ try{
     R.render(sdoc, null);
     eq(R.HOSTS.rosterCount.hidden, true, "…and hides again once the query is empty");
 
-    /* (d) zero matches: the roster's own .empty style names the query back,
-       and not one grade keeps a heading with nobody left in it. */
     R.query("zzz");
     R.render(sdoc, null);
     eq(collect(R.HOSTS.roster, x => x.className === "empty" ? x.textContent : null).join(","),
@@ -2084,18 +1433,10 @@ try{
       "a query matching nobody shows the roster's own empty-state wording, naming the query");
     eq(headsIn().length, 0, "…and every grade lost its heading along with its last match");
 
-    /* (e) clearing the query brings everyone back — same row count as an
-       unfiltered render. */
     R.query("");
     R.render(sdoc, null);
     eq(namesIn().length, N, "an empty query shows every person again — got " + namesIn().length);
 
-    /* (f) moveAffordance locks BOTH arrows while a filter is active, with the
-       shared reason sentence, and forgets nothing about the ordinary answer
-       once the search is cleared. Ada is grade tqA's first person and Al its
-       second, so unfiltered her own Move up is disabled (already first) and
-       Move down is enabled (Al is right behind her) — a real toggle, not a
-       coincidence, so clearing the search has something to prove it restored. */
     const LOCK_TITLE = "Not available while searching — clear the search to reorder";
     function moveButtons(menuNode){
       return {up:   collect(menuNode, x => x.dataset && x.dataset.act === "up"   ? x : null)[0],
@@ -2118,8 +1459,6 @@ try{
     check(mv.down && mv.down.disabled === false,
       "…and restores Move down's ordinary ENABLED state — the lock let go, it did not overwrite a value");
 
-    /* (h) visible only once people exist, and hiding the row resets the query
-       so it cannot silently ambush the next person added to an empty roster. */
     R.query("Cache");
     R.render({tiers: sdoc.tiers, groups: sdoc.groups, people: []}, null);
     eq(R.HOSTS.rosterSearchRow.hidden, true, "the search row hides itself once nobody is left to search");
@@ -2128,27 +1467,14 @@ try{
       "…and the reset is real, not cosmetic — a render with people again shows everyone, "
       + "not a filter left standing from before the roster went empty");
 
-    /* (i) THE CLASS CHECK. Nothing above this line — filtering, the count
-       line, the empty state, the search-lock on moveAffordance, or the
-       hide/reset — ever reaches commit(), edit() or snapshot(). The search
-       never touches state; if a mutation ever wired one in, this is what
-       turns red instead of the dirty flag or an undo entry nobody is
-       watching in this suite. */
     eq(R.writes(), 0,
       "the whole search flow above touched history zero times — got " + R.writes() + " write(s)");
   }
-  }   // closes §6's own outer block, opened back at "the roster panel builds"
+  }
 
-  /* ------------------------------------------------- 6b. the too-small-to-read warning */
-
-  /* computeLayout always succeeds: it scales whatever it is given until it fits
-     the page. So a roster that has outgrown its page does not fail, it shrinks,
-     and nobody finds out until it is printed. Static checks cannot tell whether
-     the warning actually fires, which is the only thing that matters. */
   {
     const LEG = new Function("makeNode",
-      /* LAYOUTS: checkLegibility now picks its rotation-advice branch off
-         LAYOUTS[...].grows instead of comparing state.layout to a literal. */
+
       ["FONT","FONTS","PAGES","ANGLES","DENSITY","G","SW","HV","MX","ZOOM_MAX","uid","LIMITS","ENUMS","ANCHORS","HEX6",
        "NAME_PT","MIN_NAME_PT","MIN_FACE_PT","LAYOUTS"].map(grabConst).join("\n") + "\n" +
       ["validatePhoto","oneOf","splitName","initials","tierOf","tierRole","subline","withAlpha",
@@ -2191,16 +1517,13 @@ try{
         tiers:tiers, people:people}, over || {});
     }
 
-    /* a comfortable roster says nothing */
     LEG.run(roster(4, 3));
     check(LEG.BAR.hidden === true, "a roster that fits raises no warning");
     eq(LEG.BAR.textContent, "", "and leaves the bar empty");
 
-    /* an empty roster says nothing either — there is nothing to be unreadable */
     LEG.run(roster(0, 4));
     check(LEG.BAR.hidden === true, "an empty roster raises no warning");
 
-    /* a roster far past what the page can hold must warn */
     const huge = roster(40, 9);
     const s = LEG.scaleOf(huge);
     check(s * 15 < 6, "the test roster really is scaled below the threshold (name is "
@@ -2214,7 +1537,6 @@ try{
     check(/turn the page|spacing|split|remove a grade/.test(LEG.BAR.textContent),
       "the suggestion names a concrete setting — got " + JSON.stringify(LEG.BAR.textContent));
 
-    /* the suggestion has to follow the state it is given, not be a fixed string */
     LEG.run(roster(40, 9, {density:"tight"}));
     check(!/set spacing to tight/.test(LEG.BAR.textContent),
       "it does not suggest a setting that is already applied");
@@ -2222,15 +1544,10 @@ try{
     check(/turn the page to landscape/.test(LEG.BAR.textContent),
       "on a portrait page it suggests landscape, not portrait");
 
-    /* and it clears again once the roster fits */
     LEG.run(roster(3, 2));
     check(LEG.BAR.hidden === true, "the warning goes away when the roster fits again");
     eq(LEG.BAR.textContent, "", "and takes its text with it");
 
-    /* ---- the same warning, about lanes.
-       Advice that names a pyramid grade is advice about a control the user is
-       not looking at. The mechanism is deliberately the same one — this MVP
-       warns and lets the user decide; it does not paginate. */
     LEG.run(roster(4, 3, {layout:"swimlanes"}));
     check(LEG.BAR.hidden === true, "a swimlanes roster that fits raises no warning");
 
@@ -2243,31 +1560,23 @@ try{
       "and advice about lanes — got " + JSON.stringify(LEG.BAR.textContent));
     check(!/grade/.test(LEG.BAR.textContent),
       "not about pyramid grades — got " + JSON.stringify(LEG.BAR.textContent));
-    /* rotation advice is the opposite question in each layout: lanes spread
-       sideways, so a wide grid wants landscape */
+
     LEG.run(roster(6, 12, {layout:"swimlanes", page:"portrait"}));
     check(/turn the page to landscape/.test(LEG.BAR.textContent),
       "many lanes on a portrait page suggests landscape — got " + JSON.stringify(LEG.BAR.textContent));
     LEG.run(roster(40, 2, {layout:"swimlanes", page:"landscape"}));
     check(/turn the page to portrait/.test(LEG.BAR.textContent),
       "a deep lane on a landscape page suggests portrait — got " + JSON.stringify(LEG.BAR.textContent));
-    /* The case that separates the two rules. A deep lane on a PORTRAIT page is
-       already as tall as the page can be: rotating would only make it worse, so
-       swimlanes must say nothing about the page. The pyramid's rule suggests
-       landscape for any portrait page, and would be wrong here. */
+
     LEG.run(roster(40, 2, {layout:"swimlanes", page:"portrait"}));
     check(!/turn the page/.test(LEG.BAR.textContent),
       "two deep lanes on a portrait page get no rotation advice — rotating cannot help — got "
       + JSON.stringify(LEG.BAR.textContent));
-    /* and the pyramid's own advice is unchanged */
+
     LEG.run(roster(40, 9));
     check(/grade/.test(LEG.BAR.textContent) && !/lane/.test(LEG.BAR.textContent),
       "the pyramid still talks about grades");
 
-    /* ---- the same warning again, about Hive's cells — LAYOUTS.hive.surface
-       is "cell", and checkLegibility's three lane-shaped fixes read that
-       word instead of a hand-typed "lane", proven by never seeing "lane" in
-       a crowded Hive's own advice. */
     const deepHive = roster(40, 9, {layout:"hive"});
     check(LEG.scaleOf(deepHive) * 15 < 6, "the hive test roster really is below the threshold");
     LEG.run(deepHive);
@@ -2279,15 +1588,6 @@ try{
     check(!/\bgrade\b/.test(LEG.BAR.textContent),
       "not about pyramid grades either — got " + JSON.stringify(LEG.BAR.textContent));
 
-    /* ---- a square page is neither portrait nor landscape.
-       checkLegibility decides the rotation advice from L.page.h/L.page.w, not
-       from the page's label text — so relabelling PAGES (or adding a page
-       whose label never says "portrait"/"landscape" at all) cannot silently
-       break it. A square page proves this the other way round: w === h means
-       neither branch's condition can be true, so an unreadable roster on a
-       square page must still warn — the text/face-size problem does not go
-       away — but must NOT suggest turning the page, in any layout, because
-       rotating a square page cannot help. */
     LEG.run(roster(40, 9, {page:"square"}));
     check(LEG.BAR.hidden === false, "an unreadable roster on a square page still warns");
     check(!/turn the page/.test(LEG.BAR.textContent),
@@ -2300,26 +1600,12 @@ try{
       + JSON.stringify(LEG.BAR.textContent));
   }
 
-  /* ------------------------------------------------- 6c. wiring regressions */
-
-  /* Four scenarios where the code looks correct on its own and the wiring
-     between two pieces is wrong — an update that reaches one place but not
-     another it also has to reach. They are grouped here because that
-     failure mode, correct code with wrong wiring, is exactly what no
-     per-function test catches. */
   {
-    /* ---- 1. the chart is described AFTER it is drawn -------------------
-       describeChart() labels the <svg> it finds inside #sheet, so it must
-       run AFTER the SVG is inserted: running before it would label the
-       previous render instead, and on the first draw there is nothing there
-       at all, leaving the chart with no accessible name. */
+
     const DRAW = new Function("makeNode",
       ["FONT","FONTS","PAGES","ANGLES","DENSITY","G","SW","HV","MX","ZOOM_MAX","uid","LIMITS","ENUMS","ANCHORS","HEX6",
        "NAME_PT","MIN_NAME_PT","MIN_FACE_PT","SVGNS",
-       /* startView() maps TEMPLATES to build the start-view cards; LAYOUTS is
-          the capability table describeChart, checkLegibility and startView
-          (through layoutIcon below) all read instead of comparing
-          state.layout/tpl.layout to a literal. */
+
        "TEMPLATES","LAYOUTS"].map(grabConst).join("\n") + "\n" +
       ["validatePhoto","oneOf","clampText","isPlainObject","paint","xmlText","xmlAttr",
        "splitName","initials","tierOf","tierRole","subline","withAlpha","angleIndex","codeParts",
@@ -2329,22 +1615,15 @@ try{
        "computePyramidLayout","computeTornadoLayout",
        "computeSwimlaneLayout","computeHiveLayout","computeMatrixLayout","nameSegs","ellipsize","fitName","toSVG","el","icon","clear","fill",
        "checkLegibility","describeChart","drawChart",
-       /* startView() itself, plus the two builders TEMPLATES.grades() calls to
-          produce a real grade list — without them the empty branch throws the
-          moment it maps over TEMPLATES. layoutIcon is startView's own helper
-          for which artwork a template's layout draws. */
+
        "startView","layoutIcon","normalizeGradeLinks","newTier",
        "personLabelWidth","headNeedWidth","docFont",
        "newGroup","resolveGroupId","groupLabel","pruneGroups"].map(grabFn).join("\n") + "\n" +
       "let state = null;\n" +
-      /* A #sheet that records how many times its content was replaced, and in
-         what order relative to the labelling — that ordering is the whole bug. */
+
       "const EVENTS = [];\n" +
       "const SHEET = makeNode('div');\n" +
-      /* Assigning innerHTML replaces the children, which is what makes fill()
-         in the empty branch take the previous render's <svg> back out again —
-         a stub that kept the SVG in a field of its own would report a chart on
-         a sheet that no longer has one. */
+
       "Object.defineProperty(SHEET, 'innerHTML', {\n" +
       "  set(v){ EVENTS.push('insert');\n" +
       "          this.children.length = 0;\n" +
@@ -2354,9 +1633,7 @@ try{
       "SHEET.querySelector = function(sel){\n" +
       "  return sel === 'svg' ? (this.children.find(c => c.tagName === 'svg') || null) : null; };\n" +
       "Object.defineProperty(SHEET, 'svg', {get(){ return this.querySelector('svg'); }});\n" +
-      /* A real class set, not a no-op. The transparent-background class is the
-         one piece of chart state that lives on the sheet element rather than in
-         the SVG, so a stub that swallowed it hid the bug in §6e entirely. */
+
       "const CLASSES = new Set();\n" +
       "SHEET.classList = {\n" +
       "  add(c){ CLASSES.add(c); },\n" +
@@ -2364,9 +1641,7 @@ try{
       "  contains(c){ return CLASSES.has(c); },\n" +
       "  toggle(c, on){ if(on) CLASSES.add(c); else CLASSES.delete(c); }};\n" +
       "const TEXT = makeNode('div'), HINT = makeNode('span'), HINTR = makeNode('span');\n" +
-      /* The live-preview note is written wherever #hintRight is, so a stub that
-         knows the one and not the other throws instead of drawing. It starts
-         hidden, exactly as the markup ships it. */
+
       "const NOTE = makeNode('span'); NOTE.hidden = true;\n" +
       "const BAR = makeNode('div'); BAR.hidden = true;\n" +
       "function $(sel){\n" +
@@ -2382,14 +1657,12 @@ try{
       "const document = { createElement: makeNode,\n" +
       "  createElementNS(ns, tag){ const n = makeNode(tag); n.ns = ns; return n; },\n" +
       "  createTextNode(t){ const n = makeNode('#text'); n.textContent = t; return n; } };\n" +
-      /* describeChart pushes 'label' the moment it touches the svg element */
+
       "const _describe = describeChart;\n" +
       "describeChart = function(){ EVENTS.push('label'); return _describe.apply(null, arguments); };\n" +
       "return {EVENTS, SHEET, TEXT, NOTE, draw(s){ EVENTS.length = 0; state = s; drawChart(); }};"
     )(function node(tag){
-      /* drawChart now sets/removes --page-ar as an inline style property on
-         #sheet (never reads it back — CSS does that), so the stub only needs
-         to record it rather than throw on the call. */
+
       const styleProps = {};
       return {tagName:tag, hidden:false, textContent:"", children:[], dataset:{}, attrs:{},
               style:{ setProperty(k,v){ styleProps[k]=v; },
@@ -2415,7 +1688,6 @@ try{
       "the name starts with the chart's title");
     check(label && /26 people/.test(label), "and states the headcount — got " + JSON.stringify(label));
 
-    /* the text equivalent has to agree with the chart it accompanies */
     check(DRAW.TEXT.children.length > 0, "the text description was built");
     const heading = DRAW.TEXT.children[0];
     eq(heading.tagName, "h2", "it opens with a heading");
@@ -2427,9 +1699,6 @@ try{
     check(dl.children[0].textContent.indexOf(drawn.tiers[0].label) === 0,
       "the first term names the first grade");
 
-    /* ---- the name has to describe the shape actually on the page.
-       "a pyramid of 9 grades" is simply wrong once the same roster is drawn as
-       lanes, and this string is all a screenreader is given for the picture. */
     check(/a pyramid of/.test(label), "the pyramid calls itself a pyramid");
     check(!/swimlane/i.test(label), "and not swimlanes");
     {
@@ -2454,14 +1723,11 @@ try{
       check(lab && /26 people/.test(lab), "with the same headcount");
       eq(DRAW.TEXT.children[0].textContent, lab,
         "and the text equivalent still agrees with the name");
-      /* the per-grade listing is unchanged: it is the roster, not the drawing */
+
       eq(DRAW.TEXT.children[1].children.length, lanes.tiers.length * 2,
         "the description still lists every grade, including any that draw no lane");
     }
 
-    /* ---- Hive reads its own drawn-group count off LAYOUTS' "cells" unit,
-       through the same generalised counting the Swimlanes block above
-       proves — literals here, from CJ's amendment, are the second source. */
     {
       const two = fresh("current");
       two.layout = "hive";
@@ -2473,10 +1739,6 @@ try{
       check(lab2 && lab2.indexOf("a hive of 2 cells") >= 0,
         "a two-grade hive roster announces \"a hive of 2 cells\" — got " + JSON.stringify(lab2));
 
-      /* the count must be DRAWN groups, not state.tiers.length — a third,
-         empty grade sits alongside two occupied ones, so a mutation that
-         counted raw tiers would say "3 cells" here while the geometry
-         itself only ever draws 2 hexes. */
       const withEmpty = fresh("current");
       withEmpty.layout = "hive";
       withEmpty.tiers = withEmpty.tiers.slice(0, 3);
@@ -2501,7 +1763,6 @@ try{
       check(lab1 && lab1.indexOf("1 cells") < 0, "never \"1 cells\" — got " + JSON.stringify(lab1));
     }
 
-    /* redrawing must re-label the NEW element, not leave the old one named */
     const second = fresh("unicode");
     DRAW.draw(second);
     eq(JSON.stringify(DRAW.EVENTS), JSON.stringify(["insert","label"]),
@@ -2510,8 +1771,6 @@ try{
     check(reLabel && reLabel.indexOf(second.title) === 0,
       "and the freshly inserted SVG carries the new name — got " + JSON.stringify(reLabel));
 
-    /* with no grades there is no SVG; the description must say so rather than
-       describing whatever was there before */
     const empty = fresh("current");
     empty.tiers = []; empty.people = [];
     DRAW.draw(empty);
@@ -2522,15 +1781,6 @@ try{
       "which reports that it is empty — got "
       + JSON.stringify(DRAW.TEXT.children[0].textContent));
 
-    /* ---- 3. the start view: layout icon + privacy footer -----------------
-       Two independent claims about the zero-grade canvas rendered a moment
-       ago by the empty branch's own startView() call: each template card's
-       layout icon is an accessible svg whose aria-label names the template's
-       OWN layout, and the footer carries exactly one control dispatching the
-       same infoPrivacy command the ribbon's Privacy button uses, plus the
-       promised offline-processing wording. Reads tolerantly throughout
-       (optional chaining, `|| []`) so a mutation that removes a node lands on
-       a red check naming the rule rather than a thrown exception. */
     {
       const cardTops = [];
       (function walk(n){
@@ -2539,8 +1789,7 @@ try{
           walk(c);
         }
       })(DRAW.SHEET);
-      /* TEMPLATES' own layout column, read directly out of the source table
-         — a second source from the ternary under test, not a copy of it. */
+
       const tplSrc = /const TEMPLATES = \[[\s\S]*?\n\];/.exec(SCRIPT);
       const tplLayouts = [];
       { const re = /layout:"([^"]+)"/g; let m;
@@ -2549,11 +1798,7 @@ try{
         "found three template layouts in TEMPLATES — got " + tplLayouts.length);
       check(cardTops.length === 3,
         "three template cards each carry a .start-card-top — got " + cardTops.length);
-      /* LITERAL labels for the three layouts TEMPLATES currently uses —
-         big4-green (pyramid), big4-orange (swimlanes), mbb-blue (hive as of
-         the Hive-template rework). Was a two-way ternary before mbb-blue
-         became Hive; a third template layout means a third literal, not a
-         cleverer derivation from the id string. */
+
       const LAYOUT_LABELS = {pyramid:"Pyramid", swimlanes:"Swimlanes", hive:"Hive"};
       cardTops.forEach((top, i) => {
         const svgIcon = (top?.children || []).find(c => c.tagName === "svg");
@@ -2564,10 +1809,7 @@ try{
         check(svgIcon?.attrs?.["aria-label"] === expected,
           "card " + i + "'s layout icon is labelled " + JSON.stringify(expected)
           + " — got " + JSON.stringify(svgIcon?.attrs?.["aria-label"]));
-        /* the aria-label alone does not prove which symbol was actually
-           drawn — a swapped map entry still writes a correct label beside
-           the wrong picture, so the <use> href is checked against the same
-           second-source layout value */
+
         const useEl = (svgIcon?.children || []).find(c => c.tagName === "use");
         const expectedHref = "#i-" + tplLayouts[i];
         check(useEl?.attrs?.href === expectedHref,
@@ -2593,38 +1835,20 @@ try{
         + JSON.stringify(footText));
     }
 
-    /* ---- the live-preview note follows the chart, both ways.
-       It explains what "fitted at 47%" means, so it belongs beside a chart and
-       nowhere else: the empty branch is a message saying there is nothing to
-       draw, and a note calling that a preview of a 300 dpi export is a claim
-       about a picture that does not exist. Driven here rather than statically
-       because both writes are one assignment each, and an assignment that runs
-       in the wrong branch reads identically to one that runs in the right one. */
     eq(DRAW.NOTE.hidden, true, "no grades, no live-preview note");
     DRAW.draw(fresh("current"));
     eq(DRAW.NOTE.hidden, false, "a drawn chart brings it back");
     DRAW.draw(empty);
     eq(DRAW.NOTE.hidden, true, "and deleting every grade hides it again");
 
-    /* ---- 2. the empty state does not inherit the last chart's background ----
-       drawChart's empty branch must toggle the `clear` class before it
-       returns, not skip past it: skipping it would leave a transparent
-       chart's checkerboard on the sheet after its last grade is deleted — a
-       message saying there is no chart, printed on the pattern that means
-       "this chart has no background". The class is stateful and nothing
-       else clears it, so a skipped toggle would survive every redraw until
-       a non-empty, opaque chart happened to be drawn. */
     {
       const has = () => DRAW.SHEET.classList.contains("clear");
 
-      /* a transparent chart really does set the class — without this the rest
-         of the section would pass against a stub that never set it at all */
       const clearBg = fresh("current");
       clearBg.bg = "transparent";
       DRAW.draw(clearBg);
       check(has(), "a transparent chart puts the checkerboard on the sheet");
 
-      /* …and then every grade goes */
       const gone = fresh("current");
       gone.bg = "transparent";
       gone.tiers = []; gone.people = [];
@@ -2634,16 +1858,12 @@ try{
       check(DRAW.SHEET.querySelector("svg") === null,
         "there is no chart on it either");
 
-      /* the description has to be current too, not the 26 people that were
-         there a moment ago */
       const said = DRAW.TEXT.children[0] && DRAW.TEXT.children[0].textContent;
       check(/0 people/.test(said || ""),
         "and the text description is the empty one — got " + JSON.stringify(said));
       check(!/26 people/.test(said || ""),
         "not the one belonging to the chart that was there before");
 
-      /* the ordinary path still works in both directions, so the fix is not
-         "remove it always" */
       const backOn = fresh("current");
       backOn.bg = "transparent";
       DRAW.draw(backOn);
@@ -2655,14 +1875,6 @@ try{
     }
   }
 
-  /* --------------------------------------- 6d. tabs are initialised, not just clickable */
-
-  /* selectTab() maintains aria-selected and the roving tabindex, and both
-     must be right from the first render, not only after a click: if the
-     first call ran no earlier than the first click, every tab would sit in
-     the tab order with none marked selected until then, and the ribbon
-     would announce as five unrelated buttons with Tab walking through all
-     of them. */
   {
     const TABS = new Function("makeNode",
       ["FONT"].map(grabConst).join("\n") + "\n" +
@@ -2674,14 +1886,11 @@ try{
       "const PANES = ['file','roster','grades','design','info'].map(function(name){\n" +
       "  const p = makeNode('div'); p.dataset.pane = name; p.className = 'rb-pane';\n" +
       "  return p; });\n" +
-      /* Counting spies rather than empty stubs: both popups are anchored to a
-         button on one tab, and a popup that outlives its tab is left pointing at
-         something that is no longer on screen. */
+
       "const DISMISSED = {menu:0, panel:0};\n" +
       "function closeMenu(){ DISMISSED.menu++; }\n" +
       "function closeGradePanel(){ DISMISSED.panel++; }\n" +
-      /* Ribbon overflow has its own DOM coverage. This harness isolates tab
-         selection, so measuring the surrounding ribbon is deliberately a no-op. */
+
       "function syncRibbonOverflow(){}\n" +
       "const document = { querySelectorAll(sel){\n" +
       "  if(sel === '.rb-tab')  return TABS;\n" +
@@ -2699,7 +1908,6 @@ try{
               focus(){ this.focused = true; }};
     });
 
-    /* what boot does */
     TABS.selectTab("file", false);
 
     const active   = TABS.TABS.filter(t => t.attrs["aria-selected"] === "true");
@@ -2718,15 +1926,12 @@ try{
     check(inactive.every(t => !t.classList.contains("on")),
       "and the inactive ones do not — class and aria must not disagree");
 
-    /* the panes follow */
     const shown = TABS.PANES.filter(p => p.classList.contains("on"));
     eq(shown.length, 1, "exactly one pane is shown");
     eq(shown[0].dataset.pane, "file", "and it is the File pane");
 
-    /* boot must not steal focus */
     check(!TABS.TABS.some(t => t.focused), "initialising the tabs does not move focus");
 
-    /* selecting another tab moves everything together, and can take focus */
     TABS.selectTab("design", true);
     const now = TABS.TABS.find(t => t.dataset.tab === "design");
     eq(now.attrs["aria-selected"], "true", "the newly selected tab is marked selected");
@@ -2739,66 +1944,22 @@ try{
     eq(TABS.PANES.filter(p => p.classList.contains("on")).length, 1,
       "still exactly one pane is shown");
 
-    /* Leaving Grades must take the grade panel with it: it is positioned in
-       viewport coordinates against a chip that the tab switch just hid, so it
-       would otherwise float over the Design pane pointing at nothing. */
     eq(TABS.DISMISSED.menu, 2, "every tab switch dismisses the save menu");
     eq(TABS.DISMISSED.panel, 2, "and the grade panel with it");
-    /* The ribbon has exactly two popups anchored to a command on a tab — the
-       save menu and the grade panel — and a tab switch must dismiss both:
-       each is positioned against a button on the tab just hidden, and would
-       otherwise float pointing at nothing. There is no third one: nothing
-       in the app keeps a standing default with a popup of its own to close. */
+
     check(!/closeOfficePop/.test(SCRIPT), "the script defines no closeOfficePop — there is no such popup to dismiss");
   }
 
-  /* ----------------------------------- 6e. the slot a dragged grade will land in */
-
-  /* Reordering is previewed by a slot: the dragged chip leaves the flow, the
-     strip closes up, and a dashed box of the chip's own size stands in the
-     gap it will drop into — rather than a thin rule down one edge of the
-     neighbouring chip, which would leave the reader to work out the drop
-     side in their head while the dragged chip sat faded in the position it
-     was about to leave.
-
-     That is a geometry change, so it is driven here rather than described: the
-     stub lays the strip out the way flexbox does — visible children in order,
-     one gap between them, nothing at all for a display:none chip — and the real
-     handlers are run against it. Everything below therefore reads the position
-     of the slot out of the same layout the handlers measured.
-
-     What no static check could see is the loop this design invites. A drop
-     chosen from a target's LEFT half moves that target a whole slot-width to the
-     right, out from under the pointer that chose it; hit-testing then finds no
-     chip at all. Throwing the answer away there removes the slot, closes the
-     strip up, and the next event re-chooses the same position — for ever. */
   {
-    /* pointer-events is read from the app's own sheet rather than assumed: a
-       decoration that can be hit is returned by elementFromPoint, and
-       .closest(".g-chip") on it is null at exactly the position being aimed at. */
+
     const SLOT_HITTABLE = !/\.g-drop-slot\{[^}]*pointer-events:none/.test(HTML);
-    /* Likewise the class that takes the dragged chip out of the flow: a stub
-       that simply believed .dragging means gone would go on laying the strip
-       out correctly for a rule the app had stopped shipping. */
+
     const DRAG_HIDES = /\.g-chip\.dragging\{display:none\}/.test(HTML);
-    /* Every chip is one fixed width in the shipped CSS, so a stub that gave them
-       all the same width could not tell a measured width from a literal. These
-       differ on purpose — the slot must be the width of the chip in flight,
-       whatever that turns out to be. */
+
     const WIDTHS = {t1:90, t2:150, t3:118, t4:118};
 
     function dsel(n, sel){
-      /* A trailing :not(.class) is supported because resolveAim uses one to
-         skip the row already out of the flow. Anything else still throws: a
-         selector shape the stub quietly mismatched would be indistinguishable
-         from the app deciding not to match.
 
-         A non-string selector is the one exception, and it is not a stub gap:
-         it is what cfg.excludePress reads as when a mutation drops that key
-         from an instantiation's config, and closest(undefined) matching
-         nothing is exactly what should happen — tolerantly, so the scenario
-         reaches the assertion that names the missing exclusion, rather than
-         crashing on the way there. */
       if(typeof sel !== "string") return false;
       const not = /:not\(\.([A-Za-z0-9_-]+)\)$/.exec(sel);
       if(not) sel = sel.slice(0, not.index);
@@ -2812,10 +1973,7 @@ try{
         return n.dataset[key] === kv[2];
       });
     }
-    /* A second node factory, deliberately: §6 asserts the tree renderRoster
-       builds and wants no geometry in it, this one is all geometry and moves
-       nodes between parents. Folding them together would put a live layout under
-       the roster panel's assertions. */
+
     function dnode(tag){
       const n = {
         tagName:tag, children:[], dataset:{}, attrs:{}, style:{}, listeners:{},
@@ -2830,10 +1988,7 @@ try{
           this.children.splice(i, 1); c.parentNode = null; return c;
         },
         remove(){ if(this.parentNode) this.parentNode.removeChild(this); },
-        /* The one method the app leans on hardest, so it follows the spec's own
-           step for it: inserting a node before itself is a no-op, not a move to
-           the end. Getting that wrong would send the slot to the far end of the
-           strip every time the pointer re-confirmed the position it was on. */
+
         insertBefore(c, ref){
           if(ref === c) ref = c.nextSibling;
           let at = this.children.length;
@@ -2948,10 +2103,7 @@ try{
       grabConst("SVGNS") + "\n" +
       ["el","icon","clear","fill","gradeChip","gradeChipFor","makeDragSurface"]
         .map(grabFn).join("\n") + "\n" +
-      /* The app's own instantiation, pulled in whole rather than built here:
-         a test-built config answers for itself, not for the app. Running it
-         also wires all nine events onto TIERS through the stub's own
-         addEventListener — there is no separate listener extraction left to do. */
+
       grabConst("gradeDragSurface") + `
       function fire(type, ev){ relayout(); (TIERS.listeners[type] || []).forEach(fn => fn(ev)); }
       function evAt(x, extra){
@@ -3003,18 +2155,14 @@ try{
                     {id:"t2", code:"D",  label:"Director"},
                     {id:"t3", code:"M",  label:"Manager"},
                     {id:"t4", code:"SC", label:"Senior Consultant"}];
-    /* a quarter and three quarters across whatever is at that position now — the
-       strip reflows under the pointer, so nothing here may hold on to an x */
+
     const inChip = (id, side) => {
       const r = D.rect(id);
       return r.left + r.width * (side === "left" ? 0.25 : 0.75);
     };
-    /* Read through, never dereferenced: a build that draws no slot at all must
-       fail these assertions with a readable value, not abandon the section on a
-       TypeError three lines later. */
+
     const slotWidth = () => { const s = D.slot(); return s ? s.style.width : "(no slot)"; };
-    /* -1 is nowhere on the strip, so a build that draws no slot answers these
-       events as a drag that has left it — a readable failure, not a TypeError */
+
     const inGap = () => { const r = D.slotRect(); return r ? r.left + 4 : -1; };
     const slotAria  = () => { const s = D.slot(); return s ? s.attrs["aria-hidden"] : "(no slot)"; };
     const startDrag = id => {
@@ -3023,7 +2171,6 @@ try{
       return id;
     };
 
-    /* --- the drag image is taken before the chip goes */
     D.render(GRADES);
     eq(D.order().join(" "), "t1 t2 t3 t4", "the strip starts as the grades are ordered");
     D.fire("dragstart", D.evAt(inChip("t2", "left"), {target:D.face("t2")}));
@@ -3041,7 +2188,6 @@ try{
       + "the slot to stand in a gap rather than widening the ribbon");
     eq(D.slots().length, 0, "no slot yet — the pointer has not been over a target");
 
-    /* --- left half puts the slot before the target, right half after it */
     D.fire("dragover", D.evAt(inChip("t3", "left")));
     eq(JSON.stringify(D.drop()), '{"id":"t3","after":false}',
       "the left half of a chip is a drop before it");
@@ -3065,13 +2211,8 @@ try{
       "and it is the same element moved, not a second one built at the new position "
       + "with the first left behind at the old one");
 
-    /* --- the gap is not "nowhere" */
-    /* THE LOOP: the pointer that chose this position is now standing in the slot
-       it created, and there is no chip under it at all. */
     const inSlot = inGap();
-    /* held rather than looked up again below: a build that clears here has no
-       slot left to aim the next event at, and the assertion this suite wants is
-       that the answer survived — not a TypeError that abandons the section */
+
     const gapSlot = D.slot();
     check(D.hit(inSlot) !== gapSlot && !D.hit(inSlot).closest(".g-chip"),
       "hit-testing inside the slot finds no chip — the slot itself is not hittable, "
@@ -3087,7 +2228,6 @@ try{
       "and so does one that arrives with the slot itself as its target, for a "
       + "surface that hit-tests it anyway");
 
-    /* --- dropping asks for the move the slot was showing */
     D.CALLS.reorder.length = 0;
     D.CALLS.offReorder.length = 0;
     D.fire("drop", D.evAt(inSlot));
@@ -3101,7 +2241,6 @@ try{
     eq(D.hidden().join(","), "", "and the dragged chip is back in the strip");
     eq(D.drop(), null, "with nothing left to drop");
 
-    /* --- leaving the strip puts the chip back, re-entering takes it out again */
     startDrag("t2"); D.flush();
     D.fire("dragover", D.evAt(inChip("t3", "left")));
     eq(D.hidden().join(","), "t2", "mid-drag the chip is out of the flow");
@@ -3118,7 +2257,6 @@ try{
     eq(D.slots().length, 0, "dragend clears the slot");
     eq(D.hidden().join(","), "", "and restores the chip");
 
-    /* --- the deferred hide cannot outlive its drag */
     D.render(GRADES);
     D.fire("dragstart", D.evAt(inChip("t2", "left"), {target:D.face("t2")}));
     D.fire("dragend", {});
@@ -3127,7 +2265,6 @@ try{
       "a hide still queued when the drag ends hides nothing — it reads the drag id "
       + "that dragend has already cleared");
 
-    /* --- the pointer fallback draws the same thing */
     D.render(GRADES);
     D.CALLS.reorder.length = 0;
     const from = inChip("t2", "left");
@@ -3147,7 +2284,7 @@ try{
       "and it produces the same slot in the same gap as native DnD");
     eq(slotWidth(), "150px", "at the same width");
     eq(JSON.stringify(D.drop()), '{"id":"t3","after":false}', "for the same drop");
-    const gapX = inGap();                    // held for the same reason gapSlot is
+    const gapX = inGap();
     D.fire("pointermove", D.evAt(gapX));
     eq(JSON.stringify(D.drop()), '{"id":"t3","after":false}',
       "the gap is not nowhere on this path either — elementFromPoint returns the "
@@ -3158,7 +2295,6 @@ try{
     eq(D.slots().length, 0, "leaving no slot behind");
     eq(D.hidden().join(","), "", "and no hidden chip");
 
-    /* --- the width is the dragged chip's, whichever chip that is */
     for(const [id, want] of [["t1","90px"], ["t3","118px"], ["t2","150px"]]){
       startDrag(id); D.flush();
       D.fire("dragover", D.evAt(inChip(id === "t4" ? "t1" : "t4", "left")));
@@ -3167,7 +2303,6 @@ try{
       D.fire("dragend", {});
     }
 
-    /* --- nothing is left of the marker it replaced */
     D.render(GRADES);
     D.fire("dragstart", D.evAt(inChip("t2", "left"), {target:D.face("t2")}));
     D.flush();
@@ -3179,22 +2314,6 @@ try{
       + JSON.stringify(classes.filter(c => /drop/.test(c))));
     D.fire("dragend", {});
 
-    /* ------------------------------- 6f. the two paths racing for one gesture */
-
-    /* Everything above drives one drag path at a time. A real gesture drives
-       BOTH: the browser emits pointerdown/pointermove for the press AND native
-       drag events for the same press, and the two paths share gradeDragId,
-       gradeDragW and gradeDrop with no arbitration except the one test in
-       dragstart. What follows is the two field reports, driven as event
-       sequences. Which of these sequences a given browser actually emits is
-       inferred — the assertions are about what the handlers do when it does. */
-
-    /* --- macOS: the slot collapses to a hairline mid-drag.
-       Reported as: the drop position stops being a chip-width gap and becomes a
-       thin vertical dashed line between two chips that have not moved apart.
-       The sequence assumes a surface that keeps delivering pointermove during a
-       native drag (WebKit) and whose own drag threshold is under six pixels, so
-       dragstart arrives while gradePointer.dragging is still false. */
     D.render(GRADES);
     D.CALLS.reorder.length = 0;
     const mStart = inChip("t2", "left");
@@ -3209,9 +2328,7 @@ try{
     D.flush();
     eq(D.hidden().join(","), "t2",
       "the deferred hide then takes the chip out of the flow, where it measures zero");
-    /* The pointer stream is still running, and it has now travelled more than six
-       pixels from the press — so the fallback claims a gesture the native path is
-       already in the middle of, and begins it a second time. */
+
     D.fire("pointermove", D.evAt(inChip("t3", "left")));
     check(!D.pointerDragging(),
       "a pointermove past six pixels does NOT claim a gesture the native path is "
@@ -3233,15 +2350,6 @@ try{
     D.fire("dragend", {});
     D.fire("pointerup", D.evAt(inChip("t3", "left")));
 
-    /* --- Windows: the cursor says not-allowed and the drag looks dead.
-       Reported as: pressing and holding a chip gives the circle-with-a-slash
-       immediately rather than a move cursor. preventDefault on dragover is the
-       whole of what decides that cursor, so it is what these assert. */
-
-    /* (i) H2's window: the pointer is still over the dragged chip itself, and
-       markGradeDrop refuses to answer for it, so dragover returns before its
-       preventDefault. Observed here; in a browser this window is only as long as
-       the deferred hide takes, so on its own it is a flash, not a dead drag. */
     D.render(GRADES);
     const wStart = inChip("t2", "left");
     D.fire("pointerdown", D.evAt(wStart, {target:D.face("t2")}));
@@ -3255,11 +2363,6 @@ try{
     eq(overSelf.dataTransfer.dropEffect, "move",
       "…and sets dropEffect to move, which is the cursor the user gets");
 
-    /* (ii) the same withholding, but persistent rather than a flash: dragging the
-       LAST chip. Hiding it does not slide another chip under the pointer — there
-       is nothing to its right — so every dragover from the press position finds
-       no chip for as long as the user holds still, which is exactly the gesture
-       the report describes. */
     D.render(GRADES);
     const lastStart = inChip("t4", "left");
     D.fire("pointerdown", D.evAt(lastStart, {target:D.face("t4")}));
@@ -3277,12 +2380,6 @@ try{
       + "and the drag reads as never having started");
     D.fire("dragend", {});
 
-    /* (iii) the alternative this section was written to test rather than assume:
-       a surface that fires pointercancel when it begins a native drag — which
-       Pointer Events requires of a user agent that has taken the pointer for a
-       drag. finishGradePointer treats it as the end of ITS drag and calls
-       clearGradeDrag, which is shared state, so it empties the native drag that
-       has only just started. Nothing in the native path notices. */
     D.render(GRADES);
     const cStart = inChip("t2", "left");
     D.fire("pointerdown", D.evAt(cStart, {target:D.face("t2")}));
@@ -3305,9 +2402,6 @@ try{
       + "and the cursor says not-allowed for the whole of the drag");
     D.fire("dragend", {});
 
-    /* --- neither report mentions this one: gradePointer outlives a native drag.
-       dragend clears the drag but not the fallback's press record, and a native
-       drag consumes the pointerup that would have cleared it. */
     D.render(GRADES);
     const lStart = inChip("t2", "left");
     D.fire("pointerdown", D.evAt(lStart, {target:D.face("t2")}));
@@ -3320,17 +2414,10 @@ try{
       + "a live press record with no button held, and the next hover across the "
       + "strip starts a drag nobody asked for");
 
-    /* --- a drag the strip is not part of.
-       #tiers sits between the ribbon and the chart, and a photo dragged in from
-       the desktop crosses it on the way to the drop zone. dragover's first
-       statement is the only thing in the program that keeps that drag off the
-       strip — there is no window- or document-level dragover to fall back on — so
-       accepting the drag any earlier than that guard makes #tiers advertise a
-       drop it has no handler for. */
     D.render(GRADES);
-    D.fire("dragend", {});                        // nothing of ours is in flight
+    D.fire("dragend", {});
     const foreign = D.evAt(inChip("t3", "left"));
-    delete foreign.dataTransfer.setData;          // a file drag carries files, not our id
+    delete foreign.dataTransfer.setData;
     D.fire("dragover", foreign);
     check(!foreign.prevented,
       "a drag that #tiers did not start is not accepted by it — a photo on its way "
@@ -3338,24 +2425,10 @@ try{
       + "as the target for it");
     eq(D.slots().length, 0, "and nothing is previewed for it");
 
-    /* ------------------------------ 6g. a press released outside the strip */
-
-    /* The leak in 6f above was found by way of native DnD, which swallows the
-       pointerup. This is the other route to the same stale record and needs no
-       native drag at all: the press never crosses six pixels, so no capture is
-       ever taken, and the button comes up somewhere #tiers does not hear about.
-       What is left is a press record with no press behind it. */
     D.render(GRADES);
     const oStart = inChip("t2", "left");
     D.fire("pointerdown", D.evAt(oStart, {target:D.face("t2")}));
-    /* the pointer leaves the strip under the threshold and the button is released
-       out there; #tiers gets no pointerup and no pointercancel — there was no
-       capture to route one back to it */
-    /* to the LEFT of the pressed chip, deliberately. Hiding t2 closes the strip up
-       from t2 rightwards, so a hover aimed to its right lands past the end of the
-       strip, markGradeDrop is handed no chip and clearGradeDropMarkers puts the
-       chip back — leaving two of the three assertions below green for a reason
-       that has nothing to do with the rule they name. t1 does not move. */
+
     const hover = D.evAt(inChip("t1", "left"), {buttons:0});
     D.fire("pointermove", hover);
     check(!D.pointerDragging(),
@@ -3365,19 +2438,6 @@ try{
       "…so no chip is taken out of the flow by a gesture nobody is making");
     eq(D.slots().length, 0, "…and no drop position is offered for it");
 
-    /* ------------------------- 6h. the same four rules, turned ninety degrees */
-
-    /* The roster panel is the second drag surface, and it is deliberately not
-       sharing code with the strip yet — see the note over the row-drag block in
-       the app. What it DOES share is four rules the strip paid for, and a rule
-       carried over as advice is a rule nobody checks. So each gets a sequence
-       here, driven the way §6e–§6g drive the strip: real handlers, synthetic
-       events, a stub that lays the list out the way the browser would.
-
-       Vertical, and rows rather than chips: a group is a heading followed by its
-       rows, one grade per group, and a drop names a PERSON. Heights differ on
-       purpose — a stub that gave every row the same height could not tell a
-       measured height from a literal, which is the whole of rule 5's bug. */
     {
       const HEIGHTS = {pAna:40, pBo:52, pCy:40, pDi:64};
       const SLOT_HITTABLE_R = !/\.p-drop-slot\{[^}]*pointer-events:none/.test(HTML);
@@ -3483,10 +2543,7 @@ try{
         grabConst("SVGNS") + "\n" +
         ["el","icon","clear","fill","makeDragSurface","rosterFiltered"]
           .map(grabFn).join("\n") + "\n" +
-        /* The app's own instantiation, pulled in whole rather than built here:
-           a test-built config answers for itself, not for the app. Running it
-           also wires all nine events onto ROSTER through the stub's own
-           addEventListener — there is no separate listener extraction left to do. */
+
         grabConst("rowDragSurface") + `
         function fire(type, ev){ relayout(); (ROSTER.listeners[type] || []).forEach(fn => fn(ev)); }
         function evAt(y, extra){
@@ -3545,9 +2602,7 @@ try{
       `)(dnode, SLOT_HITTABLE_R, DRAG_HIDES_R, HEIGHTS);
 
       const GROUPS = [["pAna","pBo"], ["pCy","pDi"]];
-      /* Laid out on every call, never held: the list reflows under the pointer
-         when a row leaves the flow and when the gap opens, so a y computed
-         before either is a y aimed at where a row used to be. */
+
       const inRow = (id, half) => {
         R.relayout();
         const r = R.row(id).rect;
@@ -3555,11 +2610,6 @@ try{
       };
       const slotH = () => { const s = R.slot(); return s ? s.style.height : "(no slot)"; };
 
-      /* --- the gap is the row's height, measured before the row is hidden ---
-         RULE 5's vertical form. A height read after .dragging has collapsed the
-         row is zero, and a zero-height dashed box is a line between two rows
-         that have not moved apart — the same picture the strip showed
-         horizontally, which is why beginRowDrag measures first. */
       R.render(GROUPS);
       eq(R.order().join(" "), "# pAna pBo # pCy pDi", "the panel starts as the roster reads");
       R.fire("dragstart", R.evAt(inRow("pBo", "top"), {target:R.row("pBo")}));
@@ -3580,7 +2630,6 @@ try{
         "standing in the gap the row will land in, in the other group");
       R.fire("dragend", {});
 
-      /* --- the height is the dragged row's, whichever row that is --- */
       for(const [id, want] of [["pAna",40], ["pDi",64], ["pBo",52]]){
         R.render(GROUPS);
         R.fire("dragstart", R.evAt(inRow(id, "top"), {target:R.row(id)}));
@@ -3592,7 +2641,6 @@ try{
         R.fire("dragend", {});
       }
 
-      /* --- top half is before, bottom half is after --- */
       R.render(GROUPS);
       R.fire("dragstart", R.evAt(inRow("pAna", "top"), {target:R.row("pAna")}));
       R.flush();
@@ -3609,7 +2657,6 @@ try{
       check(R.slot() === firstSlot,
         "and it is the same element moved, not a second one built at the new position");
 
-      /* --- a heading is the end of its grade --- */
       R.fire("dragover", R.evAt(R.head(1).rect.top + 5, {target:R.head(1)}));
       eq(JSON.stringify(R.drop()), '{"id":"pDi","after":true}',
         "a drop on a group heading aims at the LAST row of that group, after it — "
@@ -3617,11 +2664,6 @@ try{
         + "case in reorderPerson to express");
       R.fire("dragend", {});
 
-      /* --- the gap is not "nowhere" ---
-         The vertical form of the strip's loop: a drop chosen from a row's TOP
-         half pushes that row a whole gap-height down, out from under the pointer
-         that chose it. Clearing there would close the list up and re-choose the
-         same position on the next event, for ever. */
       R.render(GROUPS);
       R.fire("dragstart", R.evAt(inRow("pAna", "top"), {target:R.row("pAna")}));
       R.flush();
@@ -3635,7 +2677,6 @@ try{
         "…and leaves the gap standing, so the list does not close up under the pointer");
       R.fire("dragend", {});
 
-      /* --- a drop asks for the move the gap was showing --- */
       R.render(GROUPS);
       R.CALLS.reorder.length = 0;
       R.CALLS.offReorder.length = 0;
@@ -3652,9 +2693,6 @@ try{
       eq(R.slots().length, 0, "the gap is gone");
       eq(R.hidden().join(","), "", "and the row is back in the list");
 
-      /* ======================= RULE 1, both directions ======================= */
-
-      /* (a) native DnD refuses a gesture the fallback already owns. */
       R.render(GROUPS);
       const aStart = inRow("pAna", "top");
       R.fire("pointerdown", R.evAt(aStart, {target:R.row("pAna")}));
@@ -3667,9 +2705,6 @@ try{
         + "running one gesture is how a drag gets applied twice");
       R.fire("pointerup", R.evAt(aStart + 12));
 
-      /* (b) the fallback refuses a gesture native DnD already owns. This is the
-         half the strip was missing, and the half that produced the hairline:
-         the second beginDrag re-measures a row that display:none has collapsed. */
       R.render(GROUPS);
       const bStart = inRow("pBo", "top");
       R.fire("pointerdown", R.evAt(bStart, {target:R.row("pBo")}));
@@ -3692,11 +2727,6 @@ try{
       R.fire("dragend", {});
       R.fire("pointerup", R.evAt(inRow("pCy", "top")));
 
-      /* ============ RULE 2: dragover accepts for the whole drag ============== */
-
-      /* (a) above the "no position chosen" return. The cursor is the only thing
-         dragover reports with, and withholding preventDefault paints
-         not-allowed — which reads as a drag that never started. */
       R.render(GROUPS);
       R.fire("dragstart", R.evAt(inRow("pAna", "top"), {target:R.row("pAna")}));
       const overSelf = R.evAt(inRow("pAna", "top"));
@@ -3705,14 +2735,10 @@ try{
       check(overSelf.prevented,
         "…and the drag is accepted anyway: a refusal here is the not-allowed "
         + "cursor from the press onwards, which is what a dead drag looks like");
-      const overNothing = R.evAt(4);        // above the first group, on nothing
+      const overNothing = R.evAt(4);
       R.fire("dragover", overNothing);
       check(overNothing.prevented, "…and over no row at all, for the same reason");
 
-      /* (b) BELOW the guard that keeps foreign drags out. #drop is a SIBLING of
-         #roster, not an ancestor, and there is no window- or document-level
-         dragover in this app — so this guard is the only thing standing between
-         a photo dragged across the roster and an offer nothing will honour. */
       R.fire("dragend", {});
       eq(R.dragId(), null, "no row drag is in flight");
       const foreign = R.evAt(inRow("pCy", "top"));
@@ -3721,14 +2747,6 @@ try{
         "a drag that is not a row's is refused — preventDefault stays below the "
         + "rowDragId guard, or a file dragged over the list is offered a drop");
 
-      /* ============ RULE 3: pointercancel announces, it does not end ========= */
-
-      /* Pointer Events requires an agent that has taken the pointer for a native
-         drag to fire pointercancel, and Chromium does — so this arrives while
-         the drag it is announcing is still in flight. Tearing down there empties
-         that drag: the id goes null, dragover returns at its first line for the
-         rest of the gesture, the row comes back, and the cursor says not-allowed
-         from the press onwards. */
       R.render(GROUPS);
       const cStart = inRow("pBo", "top");
       R.fire("pointerdown", R.evAt(cStart, {target:R.row("pBo")}));
@@ -3746,8 +2764,7 @@ try{
       eq(JSON.stringify(R.drop()), '{"id":"pCy","after":false}',
         "…and still chooses positions");
       R.fire("dragend", {});
-      /* the other half of the condition: the fallback must still clean up after
-         its OWN drags, which set rowDragId themselves */
+
       R.render(GROUPS);
       const dStart = inRow("pBo", "top");
       R.fire("pointerdown", R.evAt(dStart, {target:R.row("pBo")}));
@@ -3757,8 +2774,6 @@ try{
       eq(R.dragId(), null, "and pointercancel DOES end a drag the fallback started");
       eq(R.hidden().join(","), "", "putting the row back");
       eq(R.slots().length, 0, "and taking the gap with it");
-
-      /* ============ RULE 4: a native drag ends the press record ============== */
 
       R.render(GROUPS);
       const eStart = inRow("pAna", "top");
@@ -3770,9 +2785,7 @@ try{
       check(!R.hasPointer(),
         "dragend clears it — a native drag swallows the pointerup that would "
         + "have, and the record left behind starts a drag on the next hover");
-      /* and the same record reached the other way: the button comes up outside
-         the panel, under the threshold, so no capture was ever taken and #roster
-         hears neither pointerup nor pointercancel */
+
       R.render(GROUPS);
       const fStart = inRow("pBo", "top");
       R.fire("pointerdown", R.evAt(fStart, {target:R.row("pBo")}));
@@ -3784,10 +2797,8 @@ try{
       eq(R.slots().length, 0, "…and no drop position is offered");
       check(!R.hasPointer(), "…and the stale record is dropped rather than kept");
 
-      /* --- the caret is a button, not a handle --- */
       R.render(GROUPS);
-      /* Built with the stub's own factory: el() lives inside the module, and
-         what this needs is a node in the tree with the caret's class on it. */
+
       const caret = dnode("button");
       caret.className = "ghost p-menu";
       caret.dataset.act = "menu"; caret.dataset.id = "pAna";
@@ -3800,7 +2811,6 @@ try{
       check(!R.pointerDragging() && R.slots().length === 0,
         "…so drifting six pixels from it reorders nothing");
 
-      /* --- touch scrolls the panel, it does not reorder the roster --- */
       R.render(GROUPS);
       R.fire("pointerdown", R.evAt(inRow("pAna", "top"),
         {target:R.row("pAna"), pointerType:"touch"}));
@@ -3808,12 +2818,6 @@ try{
         "a touch press starts no drag — the panel scrolls by finger and must "
         + "keep doing so, exactly as the ribbon does");
 
-      /* --- reordering is locked while the panel is searching --- */
-      /* rowDragSurface's own `allowed` predicate — checked once, at the start
-         of a gesture, in both dragstart and pointerdown. A filtered panel
-         refuses to start either path; the same gesture with the filter
-         cleared is the positive control proving the refusal above is the
-         gate and not a broken stub. */
       R.render(GROUPS);
       R.query("anything");
       R.fire("dragstart", R.evAt(inRow("pAna", "top"), {target:R.row("pAna")}));
@@ -3833,16 +2837,6 @@ try{
     }
   }
 
-  /* ------------------------- 6i. layout capability: angle/People disable */
-
-  /* test/dom.js pins that syncStyleSummaries still contains the statement
-     $("#angleBtn").disabled = lane — but that is a check on the CODE's
-     shape, and a mutation to LAYOUTS' DATA (e.g. LAYOUTS.swimlanes.angle
-     flipped to true) leaves that statement's text untouched, so it would
-     stay green while the app silently stopped disabling the angle command
-     under Swimlanes. This drives the real syncStyleSummaries and checks
-     where the two controls it disables actually land, against literals
-     (not a second read of LAYOUTS, which could not fail alongside it). */
   {
     const STYLE = new Function(
       ["PAGES","LAYOUTS"].map(grabConst).join("\n") + "\n" +
@@ -3876,19 +2870,13 @@ try{
       "…and the aria-label embeds the same reason after the command's own name — got "
       + JSON.stringify(STYLE.EL.angleBtn.attrs["aria-label"]));
 
-    /* Second-source proof that "Swimlanes" is genuinely READ off
-       LAYOUTS.swimlanes.label and not a hard-typed literal that happens to
-       match it today: doctor the label on the SAME object syncStyleSummaries'
-       own closure reads (no re-extraction needed — LAYOUTS is a plain mutable
-       object) and re-run. A hard-typed "Swimlanes" would keep saying
-       "Swimlanes" regardless of what LAYOUTS now states. */
     const savedSwimLabel = STYLE.LAYOUTS.swimlanes.label;
     STYLE.LAYOUTS.swimlanes.label = "Lanes Test";
     STYLE.run("swimlanes");
     check(STYLE.EL.angleBtn.title === "Not available in Lanes Test",
       "the reason follows a doctored LAYOUTS.swimlanes.label rather than a hard-typed "
       + "\"Swimlanes\" — got " + JSON.stringify(STYLE.EL.angleBtn.title));
-    STYLE.LAYOUTS.swimlanes.label = savedSwimLabel;      // restore before the assertions below
+    STYLE.LAYOUTS.swimlanes.label = savedSwimLabel;
 
     STYLE.run("pyramid");
     check(STYLE.EL.angleBtn.disabled === false,
@@ -3898,8 +2886,6 @@ try{
     check(STYLE.EL.angleBtn.title === "Angle",
       "…back to its own name — got " + JSON.stringify(STYLE.EL.angleBtn.title));
 
-    /* Tornado shares the pyramid's LAYOUTS row shape (angle:true) — Angle
-       stays live there too, not just under Pyramid. */
     STYLE.run("tornado");
     check(STYLE.EL.angleBtn.disabled === false,
       "Tornado leaves the angle command enabled too — got " + STYLE.EL.angleBtn.disabled);
@@ -3908,12 +2894,6 @@ try{
     check(STYLE.EL.angleBtn.title === "Angle",
       "…with its own name, not a disabled reason — got " + JSON.stringify(STYLE.EL.angleBtn.title));
 
-    /* Histogram is the new pair LAYOUTS did not have before: angle:false
-       (the Angle command does not apply — Histogram never reads state.angle)
-       together with align:true (the People row DOES apply — it positions the
-       BAND, not people within one). Angle disables exactly like Swimlanes;
-       People stays live exactly like Pyramid/Tornado, checked separately
-       below through R.panel(), the app's real grade-panel builder. */
     STYLE.run("histogram");
     check(STYLE.EL.angleBtn.disabled === true,
       "Histogram disables the Angle command — got " + STYLE.EL.angleBtn.disabled);
@@ -3925,9 +2905,6 @@ try{
       "…and the aria-label embeds the same reason after the command's own name — got "
       + JSON.stringify(STYLE.EL.angleBtn.attrs["aria-label"]));
 
-    /* Hive is the fifth row: angle:false and align:false together — neither
-       the Angle command nor the grade panel's People row applies, the same
-       shape Swimlanes has, checked the same way. */
     STYLE.run("hive");
     check(STYLE.EL.angleBtn.disabled === true,
       "Hive disables the Angle command — got " + STYLE.EL.angleBtn.disabled);
@@ -3940,18 +2917,6 @@ try{
       + JSON.stringify(STYLE.EL.angleBtn.attrs["aria-label"]));
   }
 
-  /* ------------------- 6j. Templates menu rows are built from TEMPLATES */
-
-  /* Drives the REAL fillTemplatesMenu() against a DOM stub — the three rows
-     are built at boot from TEMPLATES rather than living as static markup,
-     and this is the only coverage the built rows have. Every expectation
-     below is a LITERAL restating each shipped template's own values (the
-     same values document.js's own WANT table states independently), never a
-     second read of TEMPLATES — comparing a built row against the table that
-     built it would stay green under a mutation that moved a template's own
-     value and the expectation together. Reads the built DOM tolerantly
-     (optional chaining) so a mutation that drops a child lands on a named
-     red check rather than a thrown exception that abandons the section. */
   {
     const TM = new Function(
       ["SVGNS", "TEMPLATES"].map(grabConst).join("\n") + "\n" +
@@ -3973,15 +2938,9 @@ try{
       `
     )();
 
-    /* Counted by data-tpl, not by menu.children.length: the menu also carries
-       the trailing status hint (checked below), and a raw child count would
-       pass just as well at 4 rows plus no note as at 3 rows plus one — it
-       cannot tell "a template row appeared" from "the note disappeared". */
     const ROWS = TM.MENU.children.filter(c => c?.attrs?.["data-tpl"] != null);
     check(ROWS.length === 3, "the Templates menu builds exactly three template rows — got " + ROWS.length);
 
-    /* order: big4-green, big4-orange, mbb-blue — the same order TEMPLATES
-       states them in */
     const WANT = [
       ["big4-green",  "#004225", "#i-pyramid",   "Big 4 green"],
       ["big4-orange", "#FF4F00", "#i-swimlanes", "Big 4 orange"],
@@ -4000,7 +2959,6 @@ try{
         "row " + i + "'s accent is " + JSON.stringify(w[1])
         + " — got " + JSON.stringify(row?.attrs?.style));
 
-      /* order is fixed by CJ: accent dot first, then layout icon, then name */
       const dot = row?.children?.[0];
       check(dot?.className === "accent-dot",
         "row " + i + "'s FIRST child carries class accent-dot — got "
@@ -4024,13 +2982,6 @@ try{
         + " — got " + JSON.stringify(textNode?.textContent));
     });
 
-    /* The menu also carries the status hint explaining why a disabled row is
-       disabled — deleting it would leave 3 template rows as before and pass
-       the row count above silently, which is exactly the hole this check
-       closes. It is the menu's LAST child by construction (fillTemplatesMenu
-       appends every row first and the note after), not a fixed index — a
-       fixed index reads a position instead of the fact that matters, and
-       breaks on any row-count change that has nothing to do with the note. */
     const note = TM.MENU.children[TM.MENU.children.length - 1];
     check(note?.tagName === "span",
       "the menu's last child is the templatesNote span — got " + JSON.stringify(note?.tagName));
@@ -4046,19 +2997,8 @@ try{
       + "disabled row — got " + JSON.stringify(note?.hidden));
   }
 
-  /* ---------------------------------------------------------- 7. contrast */
-
-  /* Reference values from the WCAG 2.1 definition. If these drift, the warning
-     is either crying wolf or staying silent when text really is unreadable. */
   {
-    /* defaults() is taken whole rather than three literals being retyped below.
-       The three colour fields are checked as hex patterns rather than
-       against one specific value, because a check pinned to today's default
-       would stay green even if that default moved to a different, equally
-       readable colour — a check that would not go red for any value of the
-       thing it names is not a check. defaults() builds no grade structure at
-       all — Templates is the only source of a starting grade list — so this
-       block reads three colour fields with nothing else to stub in around it. */
+
     const C = new Function(
       grabFn("luminance") + "\n" + grabFn("contrastRatio") + "\n" +
       grabConst("CONTRAST_MIN") + "\n" +
@@ -4088,17 +3028,9 @@ try{
       "…and the ink it ships for white bands passes on white — " + D.inkOnWhite
       + " is " + C.contrastRatio("#ffffff", D.inkOnWhite).toFixed(2) + ":1");
 
-    /* the case the warning exists for */
     check(C.contrastRatio("#9BE5B8", "#FFFFFF") < C.CONTRAST_MIN,
       "a pale accent with white text is flagged");
 
-    /* ---- the warning has to appear when the colour changes ----------------
-       checkContrast() must run wherever a colour edit lands, not only from
-       inside renderAll(): a colour edit redraws only the chart, so a
-       checkContrast that only renderAll() called would appear or clear only
-       when something unrelated forced a full render — someone dragging the
-       accent into unreadable territory would get no warning at all until
-       they opened a file. */
     {
       const CC = new Function("makeNode",
         ["HEX6"].map(grabConst).join("\n") + "\n" +
@@ -4112,18 +3044,12 @@ try{
         return {tagName:tag, hidden:false, textContent:""};
       });
 
-      /* The real defaults, for the same reason as above: "the shipped default
-         colours raise no warning" has to be a statement about what ships. The
-         three pale colours below stay literals — they are the failing cases the
-         warning exists for, and they are deliberately not anything the app
-         ships. */
       const design = {accent:D.accent, inkOnColour:D.inkOnColour, inkOnWhite:D.inkOnWhite};
 
       CC.run(design);
       check(CC.CHIP.hidden === true, "the shipped default colours raise no warning");
       eq(CC.CHIP.textContent, "", "and leave the chip empty");
 
-      /* an accent too pale for white text */
       CC.run(Object.assign({}, design, {accent:"#9BE5B8"}));
       check(CC.CHIP.hidden === false, "a pale accent with white ink warns");
       check(/on the accent/.test(CC.CHIP.textContent),
@@ -4132,45 +3058,30 @@ try{
       check(CC.CHIP.textContent.indexOf(String(C.CONTRAST_MIN)) >= 0,
         "and names the threshold it failed");
 
-      /* ink on white, the other pairing */
       CC.run(Object.assign({}, design, {inkOnWhite:"#EEEEEE"}));
       check(CC.CHIP.hidden === false, "pale ink on a white band warns");
       check(/on white bands/.test(CC.CHIP.textContent),
         "and names that pairing — got " + JSON.stringify(CC.CHIP.textContent));
 
-      /* both at once */
       CC.run({accent:"#9BE5B8", inkOnColour:"#FFFFFF", inkOnWhite:"#EEEEEE"});
       check(/on the accent/.test(CC.CHIP.textContent) && /on white bands/.test(CC.CHIP.textContent),
         "both failing pairings are reported together");
 
-      /* and it clears again — a warning that never goes away is noise */
       CC.run(design);
       check(CC.CHIP.hidden === true, "fixing the colours clears the warning");
       eq(CC.CHIP.textContent, "", "and empties the chip, so nothing stale is read out");
 
-      /* an unparseable colour must not produce a bogus warning */
       CC.run(Object.assign({}, design, {accent:"not-a-colour"}));
       check(CC.CHIP.hidden === true,
         "a colour that cannot be parsed is not reported as a contrast failure");
     }
     eq(C.contrastRatio("nonsense", "#ffffff"), null, "an unparseable colour yields no ratio");
     eq(C.contrastRatio("#FFF", "#ffffff"), null, "a short hex is not silently accepted");
-    /* order must not matter */
+
     near(C.contrastRatio("#046A38", "#FFFFFF"), C.contrastRatio("#FFFFFF", "#046A38"),
       "the ratio is symmetric");
   }
 
-  /* ------------------------------------------------ 8. contrast class (light scheme) */
-
-  /* Dark Mode step (a) tokenised the chrome literals onto :root custom
-     properties with ZERO visual change — no dark values exist yet. This proves
-     the contrast MACHINERY over that tokenised sheet before a single dark
-     value is written: every rule that fills a background from a resolvable
-     token, paired with whatever ink lands on that same rule (read structurally
-     out of the CSS text, never retyped), clears CONTRAST_MIN today. A later
-     step that redefines these same tokens for `prefers-color-scheme:dark`
-     inherits this exact check with nothing to rewrite — if it goes red then,
-     that is the point of building it now. */
   {
     const CSS8 = ((/<style>([\s\S]*?)<\/style>/.exec(HTML) || ["", ""])[1])
       .replace(/\/\*[\s\S]*?\*\//g, " ");
@@ -4178,8 +3089,8 @@ try{
     const rootMatch = /:root\{([^}]*)\}/.exec(CSS8);
     check(!!rootMatch, "the :root token block is found in the stylesheet");
     const TOKENS = {};
-    const LIGHT_NAMES = new Set();   // every custom property NAME the light :root declares, hex or not
-    const LIGHT_RAW = {};            // every declared value verbatim, hex or not — for byte-for-byte island comparison
+    const LIGHT_NAMES = new Set();
+    const LIGHT_RAW = {};
     if(rootMatch){
       const re = /--([A-Za-z0-9-]+)\s*:\s*([^;]+);/g;
       let m;
@@ -4200,29 +3111,11 @@ try{
       grabConst("CONTRAST_MIN") + "\n" +
       "return {luminance, contrastRatio, CONTRAST_MIN};")();
 
-    /* One rule at a time: selector { declarations }. A comment holding a
-       literal "{" (there is one, describing `.p-name{`) would derail a naive
-       split, which is why CSS8 above had every comment blanked out first. An
-       @media wrapper's own "(...)" {" is simply never matched as a rule — the
-       scan just resumes at the next real selector, which is exactly the rules
-       nested inside it. */
     const ruleRe = /([^{}]+)\{([^{}]*)\}/g;
     const allRules = [];
     let rm0;
     while((rm0 = ruleRe.exec(CSS8))) allRules.push([rm0[1].trim(), rm0[2]]);
 
-    /* A :hover / [aria-expanded="true"] rule routinely restates only what
-       changed and leaves `color` to the cascade — button.big.rb-primary's own
-       white ink is not repeated by button.big.rb-primary:hover, which fills
-       darker but is still white text on it. The literal-ink skip (bucket 1)
-       has to see that inheritance or it wrongly assumes such a rule falls
-       back to page ink, which is how --brand-dark ends up "paired" with
-       --ink at 1.11:1 — a pairing nothing on screen ever draws. So: a first
-       pass records, for every comma-branch of every rule that states its own
-       literal (non-var) color, the BASE selector with any trailing pseudo-
-       classes and attribute selectors stripped; the second pass below treats
-       a colorless rule as bucket 1 too when one of ITS comma-branches' base
-       selectors is in that set. */
     const LITERAL_INK_BASE = new Set();
     const baseSelector = part => part.trim()
       .replace(/(:[a-zA-Z-]+(\([^)]*\))?|\[[^\]]*\])+$/, "").trim();
@@ -4233,21 +3126,15 @@ try{
       sel.split(",").forEach(part => LITERAL_INK_BASE.add(baseSelector(part)));
     });
 
-    const pairs = new Map();          // "bgToken|inkToken" -> [inkToken, bgToken]
+    const pairs = new Map();
     allRules.forEach(([sel, body]) => {
       const decls = body.split(";").map(d => d.trim()).filter(Boolean);
       const bgDecl = decls.find(d => /^background(-color)?\s*:/.test(d));
       if(!bgDecl) return;
-      /* A gradient argument (.canvas-wrap's dot grid) is decoration painted
-         UNDER the page, never a surface text sits on — the spec puts it out
-         of scope on purpose, and the naive first-var() read would otherwise
-         pair --dot with whatever ink happens to fall out of the scan, a
-         pairing nothing on screen ever draws. The real surface underneath
-         .canvas-wrap is var(--shell), and the body rule already covers that
-         pairing, so skipping the whole rule loses nothing. */
+
       if(/gradient\(/.test(bgDecl)) return;
       const bgVar = /var\(\s*(--[A-Za-z0-9-]+)\s*\)/.exec(bgDecl);
-      if(!bgVar || !(bgVar[1] in TOKENS)) return;   // literal background (.sheet) or an unresolved token — out of scope
+      if(!bgVar || !(bgVar[1] in TOKENS)) return;
       const xName = bgVar[1];
 
       const colorDecl = decls.find(d => /^color\s*:/.test(d));
@@ -4255,12 +3142,12 @@ try{
       if(colorDecl){
         const colVar = /var\(\s*(--[A-Za-z0-9-]+)\s*\)/.exec(colorDecl);
         if(colVar && (colVar[1] in TOKENS)) yName = colVar[1];
-        else return;   // bucket 1: a literal ink on a coloured fill is deliberate (avatar initials etc.) — skip
+        else return;
       }else{
         const inheritsLiteral = sel.split(",").some(part => LITERAL_INK_BASE.has(baseSelector(part)));
-        if(inheritsLiteral) return;   // bucket 1 again: inherited literal ink (a :hover with no color of its own)
+        if(inheritsLiteral) return;
         if(!("--ink" in TOKENS)) return;
-        yName = "--ink";   // no color declared or inherited — the page's own ink
+        yName = "--ink";
       }
       pairs.set(xName + "|" + yName, [yName, xName]);
     });
@@ -4279,40 +3166,25 @@ try{
       "the (--badge-bg, --badge-ink) pair is among them — the 2D badge's fill "
       + "and ink both read through tokens now, decoupled from --mute/#fff");
 
-    /* Dark Mode step (b1) part 2 deliberately duplicated two values rather than
-       aliasing them: --brand-ink reads #003153 today because that IS --brand
-       where it must read as ink rather than as a fill, and --badge-bg reads
-       #6b7480 today because that IS --mute before the badge is allowed to part
-       from muted text. Both equalities are a claim about the LIGHT scheme only
-       — a later dark step is expected to diverge them on purpose, which is
-       exactly why they are two tokens and not one alias. */
     check(TOKENS["--brand-ink"] === TOKENS["--brand"],
       "in the light scheme, --brand-ink still equals --brand byte for byte — got "
       + TOKENS["--brand-ink"] + " vs " + TOKENS["--brand"]);
     check(TOKENS["--badge-bg"] === TOKENS["--mute"],
       "in the light scheme, --badge-bg still equals --mute byte for byte — got "
       + TOKENS["--badge-bg"] + " vs " + TOKENS["--mute"]);
-    /* Dark Mode step (b2) owner correction (B): --brand-mark is the same
-       deliberate duplicate, this time of --brand itself — the mark's true
-       colour, before a dark scheme refuses to lift it and swaps it for white
-       instead. Also a light-scheme-only claim; the dark step diverges it on
-       purpose. */
+
     check(TOKENS["--brand-mark"] === TOKENS["--brand"],
       "in the light scheme, --brand-mark still equals --brand byte for byte — got "
       + TOKENS["--brand-mark"] + " vs " + TOKENS["--brand"]);
 
-    /* Dark Mode step (b2): the @media (prefers-color-scheme: dark) block
-       redefines a subset of these same tokens. Parsed the same way as the
-       light :root above, out of the same CSS8 text (comments already
-       blanked, so the block's own comment needs no re-stripping here). */
     const darkMediaMatch = /@media\s*\(prefers-color-scheme:\s*dark\)\s*\{([\s\S]*)\}\s*$/.exec(CSS8);
     const darkRootMatch = darkMediaMatch ? /:root\{([^}]*)\}/.exec(darkMediaMatch[1]) : null;
     check(!!darkMediaMatch && !!darkRootMatch,
       "the @media (prefers-color-scheme: dark) block and its own :root rule "
       + "are both found in the stylesheet");
 
-    const DARK_OVERRIDES = {};   // every declared name in the dark :root, any value shape
-    const DARK_TOKENS = Object.assign({}, TOKENS);   // light tokens, overridden by the dark block's hex values
+    const DARK_OVERRIDES = {};
+    const DARK_TOKENS = Object.assign({}, TOKENS);
     if(darkRootMatch){
       const re3 = /--([A-Za-z0-9-]+)\s*:\s*([^;]+);/g;
       let m3;
@@ -4337,9 +3209,6 @@ try{
       "the brand does not move: --brand, --brand-dark and --brand-rgb are absent "
       + "from the dark overrides — got " + JSON.stringify(overrideNames));
 
-    /* Same pair set, two value environments: the rules that define WHAT sits
-       on WHAT are scheme-independent, so distinctPairs is parsed once above
-       and walked twice here, against TOKENS and then against DARK_TOKENS. */
     [["light", TOKENS], ["dark", DARK_TOKENS]].forEach(([scheme, TOK]) => {
       distinctPairs.forEach(([y, x]) => {
         const fg = TOK[y], bg = TOK[x];
@@ -4350,14 +3219,6 @@ try{
       });
     });
 
-    /* Dark Mode step (b2) owner correction (C): the start view is a light
-       island. .sheet-empty carries a SECOND rule (not the layout one above
-       it) that re-declares every custom property its subtree actually
-       consumes at the light :root's own raw value — the page never themes,
-       so this island must equal the light scheme byte for byte in BOTH
-       schemes, not just clear a contrast ratio. Located by content rather
-       than position: the layout .sheet-empty{…} rule declares no custom
-       property at all, so the block that does is unambiguous. */
     const sheetEmptyBlocks = [];
     const seRe = /\.sheet-empty\{([^}]*)\}/g;
     let sm;
@@ -4387,22 +3248,6 @@ try{
       + "theming — got " + JSON.stringify(islandNames.filter(n => ISLAND_TOKENS[n] !== LIGHT_RAW[n])
           .map(n => n + ": island=" + ISLAND_TOKENS[n] + " light=" + LIGHT_RAW[n])));
 
-    /* Owner's dark-mode browser check: the above two assertions prove every
-       PINNED value is right, never that the pin LIST is complete — a token
-       the subtree reads but nobody pinned sails straight through both of
-       them. That is exactly what happened: --hover-faint was read by the
-       Open… tile's own .start-card-open rule and pinned by nobody, so on
-       the never-theming sheet the tile went near-black in the dark scheme.
-       This is the completeness class check that failure is now the reason
-       for: walk every already-parsed CSS rule whose selector targets the
-       island's subtree (.sheet-empty or .start-, the same two prefixes the
-       island's own comment names), collect every var(--x) its declarations
-       read, and — for the ones the dark block actually redefines, since an
-       identical value needs no pin — demand the name appear in the island
-       list. A token the dark block never touches (--brand-rgb, read by
-       .start-card:hover through --hot) draws the same colour either way
-       and must NOT be demanded, or the check would fail on the very rule
-       that proves the island unnecessary there. */
     const islandVarNames = new Set();
     allRules.forEach(([sel, body]) => {
       if(sel.indexOf(".sheet-empty") < 0 && sel.indexOf(".start-") < 0) return;
@@ -4428,10 +3273,8 @@ try{
   failures.push("the suite threw before finishing: " + ((e && e.message) || e));
 }
 
-/* ---------------------------------------------------------- report */
-
-console.log("fixtures: " + ALL.length + " files · valid " + VALID.length
-  + " · hostile " + HOSTILE.length + " · broken " + BROKEN.length);
+console.log("fixtures: " + (VALID.length + HOSTILE.length) + " roster files · valid " + VALID.length
+  + " · hostile " + HOSTILE.length);
 if(failures.length){
   console.log("\nFAILURES (" + failures.length + "):");
   failures.forEach(f => console.log("  ✗ " + f));

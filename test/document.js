@@ -1,16 +1,3 @@
-/* Document-model tests for tierform_app.html.
- *
- * The app now behaves like a single-document editor: one roster open at a time,
- * files as the only durable storage, and a dirty flag guarding unsaved work.
- * This suite drives the real functions out of the HTML against stubs, because
- * the failure modes here are quiet ones — a Save that forgets to clear the
- * dirty flag, an Open that leaves the previous roster's undo history in place,
- * a validator that stops answering for a field a file leaves out.
- *
- * Run:  node test/document.js
- *   or: osascript -l JavaScript test/document.js
- */
-
 function readFile(path){
   if(typeof require !== "undefined") return require("fs").readFileSync(path, "utf8");
   ObjC.import("Foundation");
@@ -27,23 +14,6 @@ const HTML   = readFile(here() + "tierform_app.html");
 const SCRIPT = /<script>([\s\S]*)<\/script>/.exec(HTML)[1];
 const STYLE  = /<style[^>]*>([\s\S]*?)<\/style>/.exec(HTML)[1];
 
-/* ---------------------------------------------------------- what RENDERS
-
-   The saved/unsaved icons were toggled with `icon.hidden = …`. `hidden` is an
-   IDL attribute of HTMLElement and those two elements are <svg>, i.e.
-   SVGElement, which has no such property — so the assignment created a plain
-   JavaScript expando that reflected to no content attribute and matched no
-   selector. Both icons stayed exactly as the markup shipped them: the saved one
-   on screen, under the words "Unsaved changes".
-
-   A stub that stored `hidden` and read it back agreed with the JavaScript at
-   every step and never noticed. So this resolves display the way a browser
-   does: it reads the app's OWN stylesheet and the app's OWN markup for the two
-   icons, and answers what would actually be painted for a given set of classes
-   on the wrapper. Nothing below restates a rule — change the CSS and the answer
-   changes with it. */
-
-/* rules at the top level of the sheet, with any @media context recorded */
 function cssRules(css){
   const clean = css.replace(/\/\*[\s\S]*?\*\//g, "");
   const rules = [];
@@ -70,7 +40,6 @@ function cssRules(css){
 }
 const RULES = cssRules(STYLE);
 
-/* one compound selector: div#id.cls[attr]:hover */
 function compound(text){
   const out = {tag:null, id:null, cls:[], attrs:[], pseudo:[], odd:false};
   const re = /(::?[a-z-]+(?:\([^)]*\))?)|(#[\w-]+)|(\.[\w-]+)|(\[[^\]]+\])|([A-Za-z][\w-]*)|(\*)/g;
@@ -83,12 +52,12 @@ function compound(text){
     else if(m[4]) out.attrs.push(m[4].slice(1, -1));
     else if(m[5]) out.tag = m[5];
   }
-  if(seen !== text.length) out.odd = true;      // something this matcher cannot read
+  if(seen !== text.length) out.odd = true;
   return out;
 }
-/* a full selector: compounds separated by descendant combinators only */
+
 function parseSelector(sel){
-  if(/[>+~]/.test(sel)) return null;            // no combinator in the rules that reach here
+  if(/[>+~]/.test(sel)) return null;
   const parts = sel.trim().split(/\s+/).map(compound);
   return parts.some(p => p.odd) ? null : parts;
 }
@@ -100,7 +69,7 @@ function matchOne(c, el, active){
   if(!c.pseudo.every(p => active.indexOf(p) >= 0)) return false;
   return true;
 }
-/* right-to-left over [outermost … element] */
+
 function matches(parts, chain, active){
   let k = chain.length - 1;
   for(let p = parts.length - 1; p >= 0; p--){
@@ -131,8 +100,6 @@ function lastDecl(decls, prop){
   return v;
 }
 
-/* the two icons and their wrapper, taken from the markup rather than described
-   here — an attribute added back to either tag changes what this resolves */
 function tagOf(id){
   const m = new RegExp("<([a-z]+)([^>]*\\sid=\"" + id + "\"[^>]*)>").exec(HTML);
   if(!m) throw new Error("markup for #" + id + " not found");
@@ -146,18 +113,15 @@ const ICON_SAVED   = tagOf("docIconSaved");
 const ICON_UNSAVED = tagOf("docIconUnsaved");
 const DOC_WRAP     = tagOf("docName");
 
-/* `classes` is what the app put on the wrapper; `active` lists pseudo-classes
-   to treat as matching, so :hover can be asked about as an ordinary state. */
 function displayOf(icon, classes, active){
   const wrap = {tag:DOC_WRAP.tag, id:DOC_WRAP.id, cls:classes.slice(), attrs:DOC_WRAP.attrs};
   return resolveDisplay([{tag:"body", id:null, cls:[], attrs:{}}, wrap, icon], active);
 }
-/* the winning declaration of one property for the element at the end of the
-   chain, or null when the sheet says nothing about it */
+
 function resolveProp(chain, prop, active){
   let best = null, bestSpec = -1;
   RULES.forEach(r => {
-    if(r.at.length) return;                    // no @media rule touches these — §5c pins that
+    if(r.at.length) return;
     r.sel.split(",").forEach(one => {
       const parts = parseSelector(one);
       if(!parts) return;
@@ -172,86 +136,74 @@ function resolveProp(chain, prop, active){
 }
 function resolveDisplay(chain, active){
   const v = resolveProp(chain, "display", active);
-  return v === null ? "inline" : v;            // <svg> is inline by default
+  return v === null ? "inline" : v;
 }
 function iconsShown(classes, active){
   return {saved:   displayOf(ICON_SAVED,   classes, active) !== "none",
           unsaved: displayOf(ICON_UNSAVED, classes, active) !== "none"};
 }
 
-/* Brace and paren counting runs over a MASK of the source, never over the
-   source itself: a "{" inside a comment, a string or a regex is not a brace,
-   and counting it ends a slice early — on a fragment that may still parse, so
-   the suite goes green having tested something that is not the function. The
-   mask is the same LENGTH as the source and keeps every newline, so an index
-   found in it addresses the same character in the original; slices are always
-   cut from the ORIGINAL, or every extracted function reaches new Function()
-   with its strings blanked out.
-   Duplicated in four suites. test/fixtures.js §0 asserts the copies are
-   byte-identical and carries the rest of the reasoning — which literals the
-   mask has to know about, and why. */
 function maskLiterals(src){
   const out = src.split(""), n = src.length;
   const sp = k => { if(out[k] !== "\n") out[k] = " "; };
-  /* after one of these words a "/" opens a regex; after any other identifier,
-     after a number and after ) ] it divides */
+
   const REWORD = /^(return|typeof|instanceof|in|of|new|delete|void|case|do|else|yield|await)$/;
   const stack = [{tmpl:false, depth:0}];
-  let value = false;                       // the last token ended a value
+  let value = false;
   let i = 0;
   while(i < n){
     const top = stack[stack.length - 1], c = src[i];
 
-    if(top.tmpl){                          // inside a template's TEXT
+    if(top.tmpl){
       if(c === "\\"){ sp(i); if(i + 1 < n) sp(i + 1); i += 2; continue; }
       if(c === "`"){ sp(i); i++; stack.pop(); value = true; continue; }
-      if(c === "$" && src[i + 1] === "{"){ // the "$" goes, the "{" stays
+      if(c === "$" && src[i + 1] === "{"){
         sp(i); stack.push({tmpl:false, depth:0}); i += 2; value = false; continue;
       }
       sp(i); i++; continue;
     }
 
-    if(c === "/" && src[i + 1] === "/"){                       // line comment
+    if(c === "/" && src[i + 1] === "/"){
       while(i < n && src[i] !== "\n"){ sp(i); i++; }
       continue;
     }
-    if(c === "/" && src[i + 1] === "*"){                       // block comment
+    if(c === "/" && src[i + 1] === "*"){
       const e = src.indexOf("*/", i + 2), end = e < 0 ? n : e + 2;
       while(i < end){ sp(i); i++; }
       continue;
     }
-    if(c === '"' || c === "'"){                                // quoted string
+    if(c === '"' || c === "'"){
       let j = i + 1;
       while(j < n && src[j] !== c && src[j] !== "\n") j += src[j] === "\\" ? 2 : 1;
       if(j < n && src[j] === c){ while(i <= j){ sp(i); i++; } }
-      else i++;                            // no close on this line: not a string
+      else i++;
       value = true; continue;
     }
     if(c === "`"){ sp(i); stack.push({tmpl:true, depth:0}); i++; continue; }
-    if(c === "/" && !value){                                   // regex literal
+    if(c === "/" && !value){
       let j = i + 1, cls = false, end = -1;
       for(; j < n; j++){
         const ch = src[j];
-        if(ch === "\n") break;             // a regex does not span a line
+        if(ch === "\n") break;
         if(ch === "\\"){ j++; continue; }
         if(cls){ if(ch === "]") cls = false; continue; }
         if(ch === "[") cls = true;
         else if(ch === "/"){
           j++;
-          while(j < n && /[A-Za-z]/.test(src[j])) j++;         // flags
+          while(j < n && /[A-Za-z]/.test(src[j])) j++;
           end = j; break;
         }
       }
       if(end > 0){ while(i < end){ sp(i); i++; } value = true; continue; }
     }
-    if(/[A-Za-z0-9_$]/.test(c)){                               // identifier or number
+    if(/[A-Za-z0-9_$]/.test(c)){
       let j = i;
       while(j < n && /[A-Za-z0-9_$]/.test(src[j])) j++;
       value = !REWORD.test(src.slice(i, j));
       i = j; continue;
     }
-    if(c === "}" && top.depth === 0 && stack.length > 1){       // closes a ${ }
-      stack.pop(); i++; value = true; continue;                 // stays visible
+    if(c === "}" && top.depth === 0 && stack.length > 1){
+      stack.pop(); i++; value = true; continue;
     }
     if(c === "{"){ top.depth++; value = false; i++; continue; }
     if(c === "}"){ top.depth--; value = false; i++; continue; }
@@ -288,19 +240,6 @@ function grabDecl(name){
   throw new Error("unterminated: " + name);
 }
 
-/* One listener body is needed whole: the "Replace photo" path lives in an
-   inline handler, and its guard against a stale decode is exactly what §8
-   tests. Pulling the real body out beats retyping it into the suite, where it
-   would go on passing after the app stopped doing it. */
-/* `nth` because #roster carries two click listeners — one for [data-act] and
-   one for [data-fact] — and taking whichever comes first would silently give
-   the wrong body to whatever asked. */
-/* The needle is looked for in the ORIGINAL: it is made of string literals, and
-   in the mask those are blank. Everything structural after it — the arrow, the
-   opening brace, the depth count — reads the mask. */
-/* Shared tail of grabListener and grabRawListener: from a known start index,
-   find the arrow and the brace it opens, then count depth in the MASK back
-   out to the matching close. */
 function braceBody(start, label){
   const arrow = MASK.indexOf("=>", start);
   const open  = MASK.indexOf("{", arrow);
@@ -321,11 +260,7 @@ function grabListener(selector, event, nth){
   }
   return braceBody(start, selector + " " + event);
 }
-/* For a listener bound to a variable rather than a fresh $(selector) call —
-   the drop zone's two elements share one handler through a `zone` closure
-   variable from a forEach, so grabListener's own needle-building (which
-   assumes a literal $("#id") call) cannot find it. The needle is looked for
-   verbatim, exactly as grabListener's own comment describes. */
+
 function grabRawListener(needle, label){
   const start = SCRIPT.indexOf(needle);
   if(start < 0) throw new Error("not found: " + (label || needle));
@@ -335,206 +270,89 @@ function grabRawListener(needle, label){
 const DECLS = ["HEX6","CONTRAST_MIN","SVGNS",
                "uid","HISTORY_MAX","SESSION_IDLE","ZOOM_MAX","docName","dirtyDoc",
                "history","hIndex","historyPending","photoStore","photoIds","photoSeq","session",
-               /* the bounds stateLimitProblem measures a roster against — ENUMS
-                  because the layouts this build can draw are one of them */
+
                "LIMITS","ENUMS",
-               /* saveDoc composes {app, format} onto the written copy — a free
-                  identifier inside its own body, grabbed whole below */
+
                "FILE_FORMAT",
                "docGen","importBusy","openSeq","COMMANDS",
-               /* the parked resolver askImport hands out and importClose calls */
+
                "importResolve",
-               /* The paste dialog's rows and the sentinel that stands in for
-                  "no grade this document has". The two names beside it are what
-                  the sentinel resolves TO, and they are asserted against
-                  COMMANDS.addGrade's defaults rather than restated here. */
+
                "pasteRows","PASTE_NEW","PASTE_NEW_CODE","PASTE_NEW_LABEL",
-               /* the Add dialog's photo well: the decoded photo waiting for an
-                  Add, and the radius its preview is placed at. PAN_STEP comes
-                  along because the Add framing editor's own keydown listener
-                  is grabbed whole below, and it is a free identifier inside
-                  that body — exactly as ZOOM_MAX already was for the zoom
-                  slider's bounds. */
+
                "addPending","PREVIEW_R","modalReturn","PAN_STEP","ADD_FRAME_KEY",
-               /* Whichever row's menu is showing and whichever person the Edit
-                  dialog is open on. resetPerRoster shuts both, so both come
-                  along — a New or an Open that left either pointing at somebody
-                  from the document just discarded is what that call prevents. */
+
                "personOpen","editId",
-               /* Transient roster-search UI state — never a document field, but
-                  openAddModal, openPasteModal, addFiles and moveAffordance all
-                  read or clear it now, so it has to exist here or every one of
-                  them throws before this suite ever gets to what it means to
-                  test. Stays "" throughout this suite: nothing here sets it, so
-                  clearRosterSearch's own early return means the search never
-                  actually reaches the #rosterSearch stubs below. */
+
                "rosterQuery",
-               /* The one truth of whether the guided tour is running: null
-                  when it is not, the whole set-aside user document — state,
-                  history, hIndex, historyPending, docName, dirtyDoc — while
-                  it is. tourStep is the second half of the tour's own state,
-                  which step is showing; TOUR is the one table both tourGoto
-                  (grabbed below) and showTourStep (stubbed above) read.
-                  tourCount is the live step count tourGoto writes and the
-                  Next listener reads, so a skip shrinks what "last step"
-                  means; tourCurrent is the step showTourStep last showed,
-                  which placeTour (dom.js's own ground, not driven here)
-                  reads back on scroll/resize. */
+
                "tourSaved", "tourStep", "TOUR", "tourCount", "tourCurrent"];
-/* cloneState is gone: history entries now cross a boundary that swaps photo
-   bytes for store ids, so the two directions are named separately. commit()
-   and edit() are the only ways state changes, so both come along. */
+
 const FNS   = ["updateDocLabel","syncNeverSavedBar","markDirty","resetPerRoster","confirmDiscard","newDoc",
-               /* saveDoc refuses a roster that exceeds the file limits before it
-                  writes anything, so the limit check comes along with it — without
-                  it the suite dies on the first Save rather than failing a case */
+
                "saveDoc","stateLimitProblem","encodedPhotoBytes","photoBudgetExceeded","openDoc","fileStem",
-               /* toCSV is the flat-text export's one pure function; it is
-                  driven directly against hand-built states rather than through
-                  a command, so the quoting rule is asserted on its own. */
+
                "toCSV",
                "firstTierId",
-               /* newTier is the one factory every CREATE path goes through, so it
-                  comes along with the three callers this suite drives. */
+
                "newTier",
-               /* TEMPLATES states grades AND layout AND accent AND ink together;
-                  applyTemplate is the one path that reads it, so both come along
-                  as a pair rather than one being driven through a stub. */
+
                "TEMPLATES","applyTemplate",
-               /* demoDoc builds the guided tour's own document FROM TEMPLATES'
-                  big4-green entry; startTour/endTour are the swap that puts it
-                  live in place of the user's document and back again. tourGoto
-                  is the ONE navigation path startTour and the step buttons
-                  both call — real here, unlike showTourStep (a PREAMBLE stub
-                  above), because it is what writes state, not chrome. */
-               /* tourLiveSteps is the skip rule: which TOUR rows are on
-                  screen right now, in order — tourGoto reads it to build the
-                  live list it replays and shows, and it is real here (unlike
-                  showTourStep) because it is what decides state, not chrome:
-                  it calls the real selectTab (stubbed above) and the real
-                  document.querySelector (RECTS above) to measure each row's
-                  own anchor. */
+
                "demoDoc","startTour","endTour","tourGoto","tourLiveSteps",
                "defaults","normalizeGradeLinks","reorderGrade","angleIndex","clampFrame",
                "frameLimit","photoPut","photoGet","photoSweep","packState","unpackState",
                "snapshot","canUndo","canRedo","undo","redo","render","commit","endEdit","edit",
-               /* commit()/edit() both call pruneGroups after every mutate, and
-                  toCSV/subline-adjacent paths read a person's group through
-                  groupLabel — which reads what resolveGroupId (and the
-                  newGroup it mints through) wrote. All four come along or
-                  commit() itself cannot be extracted. */
+
                "newGroup","resolveGroupId","groupLabel","pruneGroups",
-               /* Groups' one management surface (Structure ▸ Group): reorder,
-                  rename-or-merge, and the drag drop reorderGroupRow answers
-                  for. "move" is the generic array-swap moveGroup calls, the
-                  same one the grade Left/Right buttons use inline. groupRow
-                  and syncGroupModal are the list builder; open/closeGroupModal
-                  round out the dialog's own lifecycle the way open/closePasteModal
-                  do for that one. */
+
                "move","moveGroup","renameGroup","reorderGroupRow",
                "groupRow","syncGroupModal","openGroupModal","closeGroupModal",
-               /* the asynchronous import paths and the generation guard that
-                  keeps their results out of the wrong document */
+
                "newGeneration","staleWrite","addFiles","nameFromFile","photoFields","applyPhoto",
-               /* the one comparison a dropped photo's derived name is judged
-                  by, shared between addFiles' batch plan and the drop route's
-                  single-add decision; addPhotoIntoDialog is the function both
-                  the picker's change handler and that same drop route call to
-                  put a decoded photo in the Add dialog's well */
+
                "photolessMatch","addPhotoIntoDialog",
-               /* the Add people dialog: the one that creates a person, the one
-                  that decides whether it may, and the two that open and close
-                  it — a photo left in the well across a close is the failure
-                  this batch exists to prevent, so both halves of the cycle are
-                  driven rather than described.
-                  setAddPhoto owns the well; frameRect comes with it so the
-                  preview is placed by the shipped geometry and not a copy. */
+
                "addOnePerson","syncAddAvailability","openAddModal","closeAddModal",
-               /* fillGroupOptions is the Group field's one suggestion-list
-                  builder, real here (unlike the stubbed fillTierOptions) so the
-                  datalist it fills is asserted against the shipped function
-                  rather than a copy of its contract. */
+
                "fillGroupOptions",
-               /* Real, not stubbed: their guards are what resetPerRoster relies
-                  on, and a stub would go on being called after either lost one. */
+
                "closePersonMenu","closeEditModal",
                "setAddPhoto","frameRect",
-               /* the Add dialog's own framing editor, sharing framePanel with
-                  Edit's (grabbed below) but placing its preview and clamping
-                  its frame through these two of its own */
+
                "syncAddFramePreview","addFrameShim",
-               /* the placeholder circle's live initials — openAddModal and the
-                  tail of a successful Add both call it after clearing Name by
-                  hand, so it has to be real here or both throw */
+
                "syncAddPhotoInitials",
-               /* the Add dialog's Role placeholder — the same tierRole(t)
-                  policy as #editRole's, but keyed off whichever grade is
-                  currently chosen in #addTier rather than off a person */
+
                "syncAddRolePlaceholder",
-               /* the import dialog: the question addFiles asks, and the one way
-                  out of it */
+
                "askImport","importClose",
-               /* The paste dialog, end to end. It is here rather than in
-                  test/import.js because what this batch changed is a COMMIT: the
-                  NEW grade the sentinel resolves to has to arrive in the same
-                  undo step as the people put in it, and this is the suite that
-                  owns commit(), undo() and the history. The parsing helpers come
-                  along because the preview builds its rows with the real ones —
-                  a copy would go on passing after the app stopped matching
-                  grades the way it does. el/fill/clear build the preview table
-                  against the element stub below. */
+
                "splitCsvLine","splitPasteRow","matchTierByGrade","parsePasteText",
                "pasteNewTier",
-               /* the zero-grade grouping policy —
-                  the one place showPastePreview and confirmPaste both ask what
-                  the list's own Grade column needs to build */
+
                "pasteGradePlan",
                "showPastePreview","confirmPaste",
                "openPasteModal","closePasteModal","el","fill","clear",
-               /* addFiles bounds every field it builds against the same LIMITS */
+
                "clampText",
-               /* the roster arrows: one resolver, and the two things that must
-                  agree with it — the mutation and the history entry */
+
                "gradeName","moveTarget","moveLabelTo","moveLabel","movePerson",
-               /* the drop entry point and the two helpers it resolves a
-                  destination with — it drives movePerson rather than repeating
-                  it, so all four come along together or none of them means
-                  anything */
+
                "personSlot","personDropIsNoop","walkOnce","reorderPerson",
-               /* syncRowIdentity itself changes no state — which is the point, and
-                  therefore worth proving here rather than only reading */
+
                "personLabel","validatePhoto","moveAffordance","syncRowIdentity",
-               /* moveAffordance's own reordering-lock gate, and the two helpers
-                  the four add routes call to clear a search on open — grabbed
-                  real rather than stubbed so this suite proves they exist and
-                  do not throw, the same reason clearRosterSearch's callers
-                  (openAddModal, openPasteModal, addFiles, COMMANDS.importCsv)
-                  are grabbed real rather than described. */
+
                "rosterFiltered","personMatches","clearRosterSearch",
-               /* the Accent hex field. validColour is what decides a colour
-                  everywhere, including on Open, and hexFieldValue is the one
-                  thing on top of it — so both come along and the suite drives
-                  the real pair rather than restating the rule. checkContrast
-                  and its WCAG arithmetic come too, so the warning is asserted
-                  against the shipped threshold. */
+
                "validColour","hexFieldValue","luminance","contrastRatio","checkContrast",
-               /* The Edit person dialog, end to end. Its fields commit through
-                  edit() and its photo section is the one part of it built from
-                  script, so both the writes and the swap between the section's
-                  two states are driven here rather than described. removePerson
-                  comes along because the dialog and the row menu are two faces
-                  of it and the whole claim is that they are the same act. */
+
                "initials","tierRole","icon","personRowName","editPerson","firstName",
                "openEditModal","syncEditModal","syncEditPhoto","editPhotoBody",
                "framePanel","syncFramePreview","placeFramePreview",
-               /* modalOpen and modalClose are deliberately NOT grabbed: the
-                  PREAMBLE's pair records which dialog opened and closed, which
-                  is what this suite asserts, and the real ones drive #shell's
-                  inert state — chrome that test/dom.js owns. */
+
                "rowMenuFor","syncPersonMenu","focusPersonMenuItem","removePerson"];
 
-/* Browser surface the document layer touches. Every interaction the user could
-   have with a dialog is scripted, so a run is deterministic. */
 const PREAMBLE = `
   let framingId = null, state = null;
   let TIMERS = 0;
@@ -1115,84 +933,37 @@ function makeModule(){
     + DECLS.map(grabDecl).join("\n") + "\n"
     + FNS.map(n => { try{ return grabFn(n); }catch(e){ return grabDecl(n); } }).join("\n") + "\n"
     + "async function swapChange(e)" + grabListener("#fileSwap", "change") + "\n"
-    /* the file-open path, taken whole for the same reason as swapChange: the
-       sequence guard that decides which of two Opens wins lives in this
-       listener and nowhere else */
+
     + "function pickChange(e)" + grabListener("#jsonPick", "change") + "\n"
-    /* The three Accent handlers, taken whole for the same reason: the decision
-       not to commit a half-typed value, and the session key that makes a typed
-       colour one undo step, live in these bodies and nowhere else. Retyping
-       them into the suite is how a test goes on passing after the app stops
-       doing it. */
-    /* The event target IS the control, as it is in a browser: the value goes
-       into the field first and the handler reads it back off e.target. A
-       synthetic {value:…} target instead would leave the real stub untouched,
-       and "the field is not rewritten mid-session" would be asserting about a
-       field nothing had ever written to. */
+
     + "function accentPick(v){ COLOUR.picker = v; accentPickInput({target:$('#accent')}); }\n"
     + "function accentPickInput(e)" + grabListener("#accent", "input") + "\n"
     + "function typeHex(v){ COLOUR.hex = v; hexInput({target:$('#accentHex')}); }\n"
     + "function hexInput(e)" + grabListener("#accentHex", "input") + "\n"
     + "function hexBlur()"   + grabListener("#accentHex", "blur") + "\n"
-    /* The framing editor's button row — #editModal's SECOND click listener; the
-       first is the one verb the no-photo state carries. Taken
-       whole, and for the same reason as the two above: "Remove photo" is one
-       call to applyPhoto inside this body, and a suite that reached for
-       applyPhoto directly would go on passing after the handler stopped using
-       it. The other three branches are not evaluated on a remove, so the
-       identifiers they reach for do not have to exist here. */
+
     + "function rosterFact(e)" + grabListener("#editModal", "click", 2) + "\n"
-    /* The picker, taken whole for the same reason as the three above: the
-       decode, the generation capture, the importBusy pair and the choice of
-       wording for a refused file all live in this body and nowhere else. A
-       suite that called processImage and setAddPhoto itself would go on passing
-       after the listener stopped doing either. */
+
     + "async function pickPhoto(e)" + grabListener("#addPhoto", "change") + "\n"
-    /* The drop zone's own routing decision: a
-       single dropped photo naming nobody photo-less goes to the Add dialog
-       through addPhotoIntoDialog; everything else still goes to addFiles.
-       Taken whole for the same reason as the listeners above — the
-       single-vs-batch decision and the name-match check live in this body and
-       nowhere else, and a suite that called addFiles/openAddModal itself
-       would go on passing after the listener stopped choosing between them. */
+
     + "function zoneDrop(e)" + grabRawListener('zone.addEventListener("drop", e=>{', "zone drop") + "\n"
-    /* The Add dialog's own framing editor — three listeners on #addModal,
-       parallel to #editModal's own three above, taken whole for the same
-       reason: the heart of this batch is what these bodies must NOT do
-       (no edit(), no commit(), no snapshot(), no endEdit()), and a suite that
-       called addPending.frame's fields directly would go on passing after a
-       handler started reaching for state instead. #addModal's keydown is the
-       SECOND listener bound to that event — the first is Enter-submits. */
+
     + "function addFrameClick(e)" + grabListener("#addModal", "click") + "\n"
     + "function addFrameZoom(e)"  + grabListener("#addModal", "input") + "\n"
     + "function addFramePan(e)"   + grabListener("#addModal", "keydown", 2) + "\n"
-    /* The Edit dialog's four fields and its Remove person, and the row menu's
-       four items — every one of them taken whole for the reason the handlers
-       above are: what makes a burst of typing ONE history entry is the edit()
-       key written in these bodies, and a suite that called edit() itself would
-       choose its own key and go on passing after the app changed one. */
+
     + "function typeName(e)"   + grabListener("#editName", "input") + "\n"
     + "function typeGroup(e)" + grabListener("#editGroup", "input") + "\n"
     + "function typeRole(e)"   + grabListener("#editRole", "input") + "\n"
     + "function pickGrade(e)"  + grabListener("#editTier", "change") + "\n"
     + "function clickRemovePerson()" + grabListener("#editRemoveBtn", "click") + "\n"
     + "function menuClick(e)"  + grabListener("#personMenu", "click") + "\n"
-    /* Two more taken whole, and for the reason every listener above is: the
-       tour's two guards — beforeunload reading the SET-ASIDE dirty flag
-       instead of the live one, and the undo shortcut going inert mid-tour —
-       live in these bodies and nowhere else. Both are bound to window/document
-       directly rather than through a $(selector) call, so grabRawListener
-       finds them by their literal opening text, the same way zoneDrop is
-       found above. */
+
     + "function beforeUnload(e)" + grabRawListener(
         'window.addEventListener("beforeunload", e=>{', "beforeunload") + "\n"
     + "function keydownHandler(e)" + grabRawListener(
         'document.addEventListener("keydown", e=>{', "keydown") + "\n"
-    /* The tour's own three buttons, taken whole for the same reason as the
-       two above: tourGoto is the ONE navigation path, and whether Back/Next
-       call it or call endTour() instead lives in these bodies and nowhere
-       else — a suite that called tourGoto/endTour itself would go on
-       passing after a button stopped choosing between them correctly. */
+
     + "function clickTourBack()" + grabListener("#tourBack", "click") + "\n"
     + "function clickTourNext()" + grabListener("#tourNext", "click") + "\n"
     + "function clickTourX()"    + grabListener("#tourX",    "click") + "\n"
@@ -1488,8 +1259,7 @@ function makeModule(){
         setPrompt(v){ PROMPT = v; },
         get asked(){ return ASKED; }
       };`;
-  /* iconsShown is handed in rather than rebuilt inside: it reads the app's
-     stylesheet and markup, which the module has no business parsing. */
+
   return new Function("iconsShown", src)(iconsShown);
 }
 
@@ -1498,46 +1268,21 @@ const failures = [];
 const check = (c, m) => { if(c) passed++; else failures.push(m); };
 const eq = (a, b, m) => check(a === b, m + " — got " + JSON.stringify(a) + ", want " + JSON.stringify(b));
 const countOf = M => ((M.state && M.state.people) || []).length;
-/* A renamed or missing COMMANDS entry must not throw and abandon the rest of
-   the suite — it has to land on a red check() naming the rule, the same way
-   every other tolerant read in this file does. */
+
 const callCommand = async (M, name) => {
   const fn = M.commands[name];
   check(typeof fn === "function", "COMMANDS." + name + " exists and is callable");
   if(typeof fn === "function") await fn();
 };
-/* Section 16's own version of the same tolerance: demoDoc() can be made to
-   throw by a build-order bug (filtering a tier out by code, then resolving a
-   person's grade by that same code), and startTour() calls demoDoc()
-   internally — so every one of 16a through 16f can hit that throw, not only
-   the block that calls demoDoc() directly. Without this, one such mutation
-   would abort every section after the first one that touches it, reporting
-   only "the suite threw" instead of the specific rule that broke. */
+
 const guarded = async (label, fn) => {
   try{ await fn(); }
   catch(e){ check(false, label + " — got: " + ((e && e.message) || e)); }
 };
 
-/* ---------------------------------------------------------- 5d. the two logo
-   marks are PAINTED, not merely coloured.
-
-   `fill` does not inherit from `color`. Every other symbol in the sprite takes
-   its button's colour because `.ic` says `fill:currentColor`; the title-bar and
-   About marks carry no `.ic`, and without that declaration of their own both
-   fell back to SVG's initial black while `color:var(--brand)` and the bar's
-   inherited `#fff` sat above them, set and never read.
-
-   That is §5b's bug in a second costume — a value assigned in one language and
-   painted in another — and the same kind of test missed it: dom.js asserts that
-   neither mark states a colour LITERAL, which is exactly as true of a black
-   mark as of a white one. So the question here is the only one that settles it,
-   what ARRIVES, and it is answered by resolving the app's own sheet against the
-   markup's own nesting rather than by reading back what the rule says. */
 {
   const VOIDS = ["input","br","img","hr","meta","link"];
-  /* Comments, CSS and script are blanked to the same LENGTH so an index found
-     in the scan addresses the same character in HTML, and no "<div>" written
-     inside any of the three is walked as markup. */
+
   const blank = s => s.replace(/[^\n]/g, " ");
   const SCAN = HTML.replace(/<!--[\s\S]*?-->/g, blank)
                    .replace(/(<style[^>]*>)([\s\S]*?)(<\/style>)/, (_, a, b, c) => a + blank(b) + c)
@@ -1550,10 +1295,7 @@ const guarded = async (label, fn) => {
     return {tag:tag, id:attrs.id || null,
             cls:(attrs["class"] || "").split(/\s+/).filter(Boolean), attrs:attrs};
   };
-  /* The first element carrying `cls`, with its REAL ancestors — replayed from
-     the open tags before it rather than described here, so moving the mark out
-     of the title bar changes the answer instead of being invisible to it. The
-     replay staying in step is what dom.js §6's balance check is for. */
+
   const chainTo = cls => {
     const at = SCAN.search(new RegExp('<[a-z]+[^>]*\\sclass="[^"]*\\b' + cls + '\\b'));
     if(at < 0) return null;
@@ -1567,10 +1309,7 @@ const guarded = async (label, fn) => {
       .exec(SCAN.slice(at));
     return open ? stack.concat([elOf(open[1], open[2])]) : null;
   };
-  /* What the path is actually filled with: the winning `fill`, and where that
-     says currentColor, the nearest `color` at or above it. Every step reads
-     tolerantly — a mutation that removes an element or a declaration has to
-     land on a red eq() naming the rule, not throw and abandon the section. */
+
   const inkOf = chain => {
     if(!chain) return "no such element in the markup";
     const fill = resolveProp(chain, "fill");
@@ -1584,8 +1323,7 @@ const guarded = async (label, fn) => {
   };
 
   const aboutChain = chainTo("about-mark");
-  /* openInfo() adds .about-open to .modal-info for this document, so the chain
-     asked about is the one on screen when the mark is visible at all */
+
   if(aboutChain){
     const box = aboutChain.filter(e => e.cls.indexOf("modal-info") >= 0)[0];
     if(box) box.cls.push("about-open");
@@ -1599,16 +1337,11 @@ const guarded = async (label, fn) => {
      + "same reason, and it is the only thing that makes one symbol serve both homes");
 }
 
-/* Let every already-resolved promise run. Six turns is well past the deepest
-   await chain in the import path; the number is slack, not a measurement. */
 async function tick(){ for(let i = 0; i < 6; i++) await Promise.resolve(); }
 
 const IMG  = {data:"data:image/jpeg;base64,AAAA", w:120, h:120};
 const file = n => ({name:n, type:"image/jpeg"});
 
-/* addFiles decodes strictly one image at a time, so the queue holds at most one
-   pending decode. Draining it is what "let the batch finish" means here, and
-   doing it explicitly is what lets a test change the document mid-batch. */
 async function settle(M, result){
   for(let guard = 0; guard < 50; guard++){
     await tick();
@@ -1620,33 +1353,16 @@ async function settle(M, result){
   await tick();
 }
 
-/* The nth person, or an empty stand-in. A mutation that stops an Add from
-   happening leaves nobody at that index, and `people[0].photo` would then throw
-   and abandon the rest of the section — which reads in a report exactly like
-   coverage and is not. Reading tolerantly is what turns that into a red
-   `check()` naming the rule. */
 function who(M, i){ return ((M.state && M.state.people) || [])[i] || {}; }
 
 function personIn(M, name){
-  /* Resolved through the app's own resolveGroupId, against M.state — the
-     same policy a real Add or a real edit()'d group field goes through —
-     so every caller of this helper gets a person whose group reads back as
-     "FRA" through groupLabel exactly as a real person's would. */
+
   return {id: "x" + Math.random().toString(36).slice(2,7), name: name,
           tierId: M.state.tiers[0].id, groupId: M.resolveGroupId(M.state, "FRA"),
           role: "", photo: null,
           pw: 0, ph: 0, frame: null};
 }
 
-/* defaults() ships no grades at all — Templates is the only source of a
-   starting grade list. Almost this entire suite is about people, photos,
-   undo and Save — not about grades — and is written against this shipped
-   shape (an attached second band, a shared last band, six entries so
-   tiers[0]..tiers[5] are all addressable), so it keeps living here as
-   ordinary test fixture data — not read from TEMPLATES or from any
-   production factory, which is what keeps this suite a second, independent
-   source rather than a table checked against itself. Fresh ids every call, so
-   two documents in the same test never share one. */
 let sixGradesSeq = 0;
 function sixGrades(){
   sixGradesSeq++;
@@ -1663,29 +1379,16 @@ function sixGrades(){
   ];
 }
 
-/* Several document commands are async — the dialogs they raise are — so the
-   suite runs inside an async function and awaits them. Without the await
-   every assertion would run against a pending promise and pass by
-   accident. */
 async function runSuite(){
-  /* ---------------------------------------------------------- 1. dirty flag */
 
   {
     const M = makeModule();
     M.state = M.defaults();
-    /* defaults() ships no grades at all now — a fresh document is genuinely
-       empty and is proved not-yet-saveable a few lines down. The rest of this
-       block (the Save lifecycle, the dirty-icon lifecycle) is about document
-       plumbing that has nothing to do with grades, so it needs a saveable
-       structure to get there — one plain grade, not read from any factory. */
+
     M.state.tiers = [{id:"g1", code:"G", label:"Grade", fill:"green",
                        attach:false, merge:false, align:"center"}];
     M.docName = ""; M.dirtyDoc = false;
 
-    /* A new document opens on a neutral placeholder title, not a blank one.
-       It has to be a real string: the title is drawn into the chart and
-       written into the roster file, and "" would render an untitled chart
-       that reads as a layout bug. */
     eq(M.defaults().title, "Team name", "a new document's title is the neutral placeholder");
     eq(M.defaults().groupsLabel, "", "a new document's group-axis label is empty — nothing is drawn until one is set");
     eq(M.defaults().showGradeCode, true, "new charts show grade codes");
@@ -1696,18 +1399,11 @@ async function runSuite(){
     eq(M.defaults().showPersonName, true, "new charts show person names");
     eq(M.defaults().showPersonGrade, true, "new charts show person grades");
     eq(M.defaults().showPersonGroup, true, "new charts show person groups");
-    /* A file that omits these takes the documented default, and one that states
-       them keeps what it said — including an explicit false, which is a real
-       choice and the trap this pair of loops exists for. There is no upgrade
-       step in front of the validator, so the validator answers for both;
-       test/import.js drives it, this only pins what the answers are. */
-    /* A fresh document ships no grades at all, so it is NOT yet saveable —
-       Templates (Structure) is the route to a saveable structure. */
+
     eq(M.stateLimitProblem(M.defaults()), "the roster has no grades",
       "and a fresh document is not yet saveable — it has no grades to save");
     {
-      /* One grade, so every check below is about the FIELD it names rather
-         than being masked by the empty-grades refusal proved just above. */
+
       const bad = M.defaults();
       bad.tiers = [{id:"g1", code:"G", label:"Grade", fill:"green",
                     attach:false, merge:false, align:"center"}];
@@ -1742,49 +1438,8 @@ async function runSuite(){
 
     eq(M.dirtyDoc, false, "a fresh document starts clean");
 
-    /* ---- 5c. the ground the resolver above stands on.
-       It answers from top-level rules only and ignores pseudo-classes it was
-       not asked about, so both of those have to be true of the real sheet. */
-    {
-      const touching = RULES.filter(r => /docIcon/.test(r.sel));
-      check(touching.length >= 3,
-            "the sheet decides both icons by rule — found " + touching.length);
-      check(touching.every(r => r.at.length === 0),
-            "no @media block moves the status icons, so the resolver may read top-level rules");
-      check(!touching.some(r => /:hover|:focus|:active/.test(r.sel)),
-            "no icon rule keys off a pointer or focus state");
-      /* The attribute that did nothing. If it comes back to the markup the app
-         is one careless `icon.hidden = …` away from the same bug, so the tag
-         itself is pinned. */
-      check(ICON_SAVED.attrs.hidden === undefined && ICON_UNSAVED.attrs.hidden === undefined,
-            "neither icon carries a hidden attribute — CSS decides, not an attribute "
-            + "the DOM will not reflect for an <svg>");
-      eq(ICON_SAVED.tag, "svg", "the saved icon really is an <svg>, which is why hidden did nothing");
-      eq(ICON_UNSAVED.tag, "svg", "and so is the unsaved one");
-      /* both hrefs still written out in full, and still the two different glyphs */
-      check(/<use href="#i-file-save"\/>/.test(HTML), "the saved icon references #i-file-save statically");
-      check(/<use href="#i-file-save-off"\/>/.test(HTML), "the unsaved icon references #i-file-save-off statically");
-      /* informational, not a control */
-      check(!/id="docName"[^>]*\sdata-cmd=/.test(HTML) && !/id="docName"[^>]*onclick/.test(HTML),
-            "the status strip is not clickable");
-      /* no Saving state crept in */
-      check(!/"Saving/.test(SCRIPT), "there is no Saving state");
-    }
-    /* ---- what the ribbon's status strip shows, over one document's life.
-       Exactly one icon at a time, and the name beside it, with no bullet. */
     M.updateDocLabel();
-    /* ---- 5b. which icon is PAINTED, at each point in that life.
-       shown.saved / shown.unsaved are resolved from the app's stylesheet
-       against the classes the app put on the wrapper — not read back off a
-       property the app just set. The bug that made this necessary is written
-       up at the top of this file. exactlyOne is the invariant that actually
-       matters to a reader of the screen: never two icons, never none.
 
-       Three named states: "fresh" (never
-       saved), "unsaved" (saved once, dirty since) and "saved". Fresh paints
-       the SAME icon as unsaved — there is no third glyph — so iconState folds
-       the two together for the icon assertion while status/freshClass/
-       dirtyClass still tell them apart. */
     const STATUS_TEXT = {fresh:"Not saved yet", unsaved:"Unsaved changes", saved:"Saved"};
     const exactlyOne = (want, where) => {
       const s = M.shown;
@@ -1792,21 +1447,18 @@ async function runSuite(){
       eq(s.saved === (iconState === "saved") && s.unsaved === (iconState === "unsaved"), true,
          where + ": exactly the " + iconState + " icon renders — got saved=" + s.saved
          + " unsaved=" + s.unsaved);
-      /* Hover brightens the strip and must do nothing else. Asking the same
-         question with :hover active is how that gets proved rather than
-         eyeballed — no rule in the sheet may key these icons off a pointer. */
+
       eq(s.savedOnHover, s.saved,   where + ": hover does not change the saved icon");
       eq(s.unsavedOnHover, s.unsaved, where + ": hover does not change the unsaved icon");
-      /* and the words agree with the picture */
+
       eq(s.status, STATUS_TEXT[want],
          where + ": the visible status reads " + STATUS_TEXT[want] + " — got " + s.status);
-      /* no tooltip is written; the visible status text stands in its place */
+
       eq(s.titleWrites.length, 0,
          where + ": updateDocLabel writes no tooltip — got " + JSON.stringify(s.titleWrites));
       eq(s.iconWrites.length, 0,
          where + ": nothing wrote to the icon elements — got " + JSON.stringify(s.iconWrites));
-      /* exactly one of .fresh/.dirty, matching the named state — never both,
-         never neither of the two active ones */
+
       eq(s.freshClass, want === "fresh", where + ": .fresh class matches the fresh state");
       eq(s.dirtyClass, want === "unsaved", where + ": .dirty class matches the unsaved state");
       check(!(s.freshClass && s.dirtyClass),
@@ -1836,10 +1488,6 @@ async function runSuite(){
     check(!/•/.test(M.shown.name), "and no bullet appended to the name — got " + M.shown.name);
     exactlyOne("fresh", "after an edit to an untitled document");
 
-    /* saving clears the dirty flag AND gives the document a name for the
-       first time, so the never-saved bar has to come down along with the
-       state that put it up — this is also what makes the close-guard
-       trustworthy from here on */
     M.setPrompt("my-team");
     eq(await M.saveDoc(false), true, "save completes");
     eq(M.dirtyDoc, false, "saving clears the dirty flag");
@@ -1853,12 +1501,10 @@ async function runSuite(){
     exactlyOne("saved", "after saving");
     eq(M.downloads.length, 1, "saving produced a download");
     eq(M.downloads[0], "my-team.json", "saved under the chosen name");
-    /* The file records which geometry drew it. Every roster saved from here on
-       carries the property, so a later build never has to guess. */
+
     eq(JSON.parse((M.written[0] || {}).text || "{}").layout, "pyramid",
        "the saved roster file states its layout");
-    /* app/format identify the file on sight; state itself never carries either
-       key, so this is the one place that can see them — the written bytes. */
+
     {
       const written = JSON.parse((M.written[0] || {}).text || "{}");
       eq(written.app, "tierform", "the saved file names the app that wrote it");
@@ -1867,11 +1513,7 @@ async function runSuite(){
         "and neither key lives on state itself — only the written file carries them");
     }
 
-    /* a second save must not re-prompt — it is Save, not Save As. And an edit
-       to an already-named document reads Unsaved changes, never Not saved
-       yet — the never-saved bar has no business reappearing once the
-       document has somewhere to go. */
-    M.setPrompt(null);                       // if it prompts, it will now cancel
+    M.setPrompt(null);
     M.markDirty();
     eq(M.shown.status, "Unsaved changes",
       "an edit after saving reads Unsaved changes, not Not saved yet");
@@ -1882,7 +1524,6 @@ async function runSuite(){
     eq(M.downloads[1], "my-team.json", "Save reuses the established name");
     eq(M.dirtyDoc, false, "the second save cleared the flag too");
 
-    /* Save As always prompts, and a cancel must change nothing */
     M.markDirty();
     M.setPrompt(null);
     eq(await M.saveDoc(true), false, "Save As returns false when cancelled");
@@ -1894,24 +1535,19 @@ async function runSuite(){
     eq(M.shown.name, "my-team", "and the old name, since the rename did not happen");
     exactlyOne("unsaved", "after a cancelled Save As");
 
-    /* Save As with a new name retargets the document */
     M.setPrompt("other-team");
     eq(await M.saveDoc(true), true, "Save As with a name succeeds");
     eq(M.docName, "other-team", "Save As renames the document");
     eq(M.downloads[2], "other-team.json", "Save As wrote the new name");
 
-    /* a typed ".json" must not double up */
     M.setPrompt("with-ext.json");
     await M.saveDoc(true);
     eq(M.downloads[3], "with-ext.json", "a typed .json extension is not doubled");
 
-    /* an empty name falls back rather than producing ".json" */
     M.setPrompt("   ");
     await M.saveDoc(true);
     eq(M.downloads[4], "with-ext.json", "a blank name falls back to the current one");
   }
-
-  /* ---------------------------------------------------------- 2. the close guard */
 
   {
     const M = makeModule();
@@ -1928,8 +1564,6 @@ async function runSuite(){
     eq(await M.confirmDiscard("do a thing"), true, "a dirty document proceeds when confirmed");
   }
 
-  /* ---------------------------------------------------------- 3. New */
-
   {
     const M = makeModule();
     M.state = M.defaults();
@@ -1939,7 +1573,6 @@ async function runSuite(){
     M.docName = "old-doc";
     M.dirtyDoc = true;
 
-    /* refusing the prompt must abandon the whole operation */
     M.setConfirm(false);
     await M.newDoc();
     eq(countOf(M), 1, "New cancelled: the roster is untouched");
@@ -1954,11 +1587,7 @@ async function runSuite(){
     eq(M.dirtyDoc, false, "New: starts clean, so closing straight away is silent");
     eq(M.state.tiers.length, 0,
       "New: genuinely empty — no grades ship by default, Templates is the way in");
-    /* newDoc calls renderAll, which is not in this module — the label is what
-       the app repaints, so drive it directly and check what it would show.
-       A brand-new document has never touched disk either, so this reads
-       Not saved yet, not Saved — the same never-saved state a first launch
-       shows. */
+
     M.updateDocLabel();
     eq(M.shown.name, "Untitled roster", "New: the status shows Untitled roster again");
     eq(M.shown.saved, false, "New: the never-saved state, not the saved icon");
@@ -1970,16 +1599,8 @@ async function runSuite(){
       "New: the never-saved bar stays hidden — the fresh document is clean");
   }
 
-  /* ------------------------------------------ 3b. complete grade structures */
-
   {
-    /* applyTemplate replaces FIVE properties in one commit — tiers, layout,
-       accent, inkOnColour and nameLabelPosition — unlike the Restore default
-       grades command it replaced, which touched only tiers. Every literal
-       below (codes, layout, accent, ink, name label position) is written by
-       hand from the approved template brief, not read off TEMPLATES itself —
-       a table compared against itself would stay green under a mutation that
-       changed a template's own colour. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.title = "Keep this title";
@@ -1987,10 +1608,7 @@ async function runSuite(){
     M.state.inkOnColour = "#000000";
     M.state.layout = "swimlanes";
     M.state.page = "a4-portrait";
-    /* Big 4 green states "next" — starting from "below" (the opposite, and
-       also defaults()' own value) is what makes the assertion below prove
-       the template's OWN value was written, not merely that the field
-       survived untouched. */
+
     M.state.nameLabelPosition = "below";
     M.state.tiers = [{id:"custom-grade", code:"X", label:"Custom", role:"",
                       fill:"green", attach:false, merge:false, align:"center"}];
@@ -2037,9 +1655,7 @@ async function runSuite(){
   }
 
   {
-    /* At zero grades there is nothing a template would destroy, so the
-       confirmation is skipped entirely — asking "replace the structure?"
-       about a structure that does not exist has one honest answer. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = [];
@@ -2047,7 +1663,7 @@ async function runSuite(){
     M.dirtyDoc = false;
     const asked = M.asked.length;
 
-    M.setConfirm(true);            // would answer yes if asked — proves it wasn't
+    M.setConfirm(true);
     await M.applyTemplate("mbb-blue");
     eq(M.asked.length, asked, "zero grades: applying a template opens no confirmation");
     eq(M.state.tiers.map(t => t.code).join(","), "SP,AP,EM,A,F,JF",
@@ -2060,9 +1676,7 @@ async function runSuite(){
   }
 
   {
-    /* An id nothing named — a stale menu, a corrupted data-tpl — does nothing
-       rather than guessing. No alert either: nothing was asked for that could
-       be refused, so there is nothing to explain. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -2122,14 +1736,6 @@ async function runSuite(){
       "people present: both actions explain how to make them available");
   }
 
-  /* ------------------------------------------------- 3b2. the whole roster
-
-     Clear roster is the people-shaped twin of Clear grades, and it is
-     asserted the same way: cancelled it does nothing at all, confirmed it
-     empties state.people and leaves every other field of the document standing,
-     and one Undo brings the whole roster back. The grades are the interesting
-     half — this command is next to them in the same ribbon group, and "it
-     deleted the grades too" is the failure it exists not to have. */
   {
     const M = makeModule();
     M.state = M.defaults();
@@ -2141,9 +1747,7 @@ async function runSuite(){
     M.docName = "current-file";
     M.dirtyDoc = false;
     const before = JSON.stringify(M.state);
-    /* the grades as a whole, written down before the command runs: the
-       comparison below has to be against something this command never touches,
-       not against state.tiers read back out of the state it just edited */
+
     const grades = JSON.stringify(M.state.tiers);
     const gen = M.docGen;
 
@@ -2173,8 +1777,6 @@ async function runSuite(){
     eq(countOf(M), 0, "one Redo empties it again");
   }
 
-  /* An empty roster has nothing to clear, so the command stops before it asks —
-     a confirmation about nobody is a question with one honest answer. */
   {
     const M = makeModule();
     M.state = M.defaults();
@@ -2189,16 +1791,13 @@ async function runSuite(){
   }
 
   {
-    /* TEMPLATES itself. Every value below is a LITERAL taken from the approved
-       brief, not read off TEMPLATES — comparing the table to itself would stay
-       green under a mutation that moved a value and the expectation together. */
+
     const M = makeModule();
     const WANT = [
       {id:"big4-green",  name:"Big 4 green",  layout:"pyramid",
        accent:"#004225", ink:"#FFFFFF", nameLabelPosition:"next",
        codes:"P,AS,D,SM,M,SC,C,A,JS"},
-      /* The one template that writes in black: white on this orange is 3.3:1,
-         and the ink here is the pair the International Orange swatch carries. */
+
       {id:"big4-orange", name:"Big 4 orange", layout:"swimlanes",
        accent:"#FF4F00", ink:"#000000", nameLabelPosition:"below",
        codes:"P,D,SM,M,SA,A"},
@@ -2225,12 +1824,7 @@ async function runSuite(){
       check(a.length > 0 && a.every((x, j) => x.id !== (b[j] || {}).id),
         "template " + (i + 1) + ": each call builds fresh ids, not one shared array");
     }
-    /* A template is a complete look, and an unreadable one is not a look: the
-       app raises its own contrast warning under CONTRAST_MIN, so a template
-       shipping white text on a light accent would fire that warning on its own
-       first draw. Answered by the app's real WCAG arithmetic and its real
-       threshold over each pair, and over ALL of them rather than the one that
-       needed black — the next template nobody has written yet is covered too. */
+
     for(const t of M.TEMPLATES){
       const r = M.contrastRatio(t.accent, t.ink);
       check(r >= M.CONTRAST_MIN,
@@ -2238,8 +1832,6 @@ async function runSuite(){
         + "above the threshold the app's own warning enforces");
     }
 
-    /* The two attach/merge specifics named in the brief, each answered by
-       running the real template rather than restating its numbers. */
     const green = (M.TEMPLATES.find(t => t.id === "big4-green") || {}).grades() || [];
     check((green[1] || {}).attach === true && (green[1] || {}).fill === "white"
        && (green[1] || {}).align === "right",
@@ -2251,13 +1843,7 @@ async function runSuite(){
   }
 
   {
-    /* At zero grades, the Add dialog is a door, not a wall. The Grade field
-       itself becomes the place the FIRST grade is created — the typed value
-       becomes the created grade's LABEL in full, but its CODE is only the
-       first letter, uppercased, a one-letter code like the shipped
-       templates' (unlike pasteGradePlan's value-as-both convention for an
-       unmatched paste row, which is a paste-only rule) — and the first
-       grade and the first person land in ONE commit. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = [];
@@ -2268,9 +1854,6 @@ async function runSuite(){
     eq(M.add.firstGradeFieldShown, true, "no grades: …which is shown in its place");
     eq(M.add.templateHintShown, true, "no grades: …alongside the escape hatch to Templates");
 
-    /* (b) An empty First-grade field is the one refusal left in this dialog —
-       nothing disables the dialog itself, so addOnePerson has to say no when
-       there is nothing to create a grade from. */
     M.setAdd({firstGrade:"", name:"Ada"});
     eq(await M.addOnePerson(), false,
       "no grades, no typed grade: addOnePerson reports that it added nobody");
@@ -2283,13 +1866,6 @@ async function runSuite(){
     eq(M.history.length, 0, "…no history entry");
     eq(M.dirtyDoc, false, "…and the document is not marked dirty");
 
-    /* A stale typed grade name must not survive a close/reopen — it identified
-       the LAST dialog's grade, not this one, the same "value that outlives its
-       dialog" defect that cost this app every standing default it used to
-       carry. openAddModal clears #addFirstGrade and THEN calls
-       syncAddRolePlaceholder, so the reopened dialog's placeholder must not
-       echo the stale name either — two reads, not one, pin the order as
-       load-bearing rather than incidental. */
     M.setAdd({firstGrade:"Leftover Grade"});
     M.openAddModal();
     eq(M.add.firstGrade, "",
@@ -2297,10 +1873,6 @@ async function runSuite(){
     eq(M.add.rolePlaceholder, "",
       "…and the role placeholder does not echo the stale grade name either");
 
-    /* (d, part 1) The role placeholder follows the typed value live, before
-       any grade exists for tierRole to read from — two different literals, so
-       a stale first-keystroke snapshot would be caught, not just a wrong
-       initial read. */
     M.setAdd({firstGrade:"Director"});
     M.syncAddRolePlaceholder();
     eq(M.add.rolePlaceholder, "Director",
@@ -2310,14 +1882,11 @@ async function runSuite(){
     eq(M.add.rolePlaceholder, "Senior Director",
       "…and stays live as the field is retyped");
 
-    /* (a) Back to the value that will actually be added. */
     M.setAdd({firstGrade:"Director", name:"Ada"});
     eq(await M.addOnePerson(), true,
       "no grades, a typed first grade: addOnePerson reports success");
     eq(M.state.tiers.length, 1, "…exactly one grade now exists");
-    /* Read tolerantly: a mutation that never creates the grade must land on a
-       red check() below, not on a thrown TypeError that abandons the rest of
-       this section. */
+
     const created = M.state.tiers[0] || {};
     eq(created.code, "D",
       "…whose code is the typed grade's first letter, uppercased — got " + created.code);
@@ -2328,10 +1897,6 @@ async function runSuite(){
       "…filed under the grade that was just created, not left unassigned");
     eq(M.history.length, 1, "…the grade and the person are ONE commit, one undo step");
 
-    /* "Director" already starts with an uppercase letter, so the assertion
-       above alone would still pass if the uppercasing were silently dropped.
-       A lowercase-first typed grade is the one input that actually exercises
-       .toUpperCase() — read tolerantly, the same reason as above. */
     const M2 = makeModule();
     M2.state = M2.defaults();
     M2.state.tiers = [];
@@ -2344,30 +1909,17 @@ async function runSuite(){
     eq(created2.label, "partner",
       "…while the label keeps the typed casing verbatim — got " + JSON.stringify(created2.label));
 
-    /* (c) renderRoster is stubbed in this harness (it drives syncPersonMenu
-       and syncEditModal only, see the comment beside it) so the real render
-       chain's own call to syncStructureAvailability -> syncAddAvailability
-       does not fire here; called by hand instead so this assertion still
-       sees the availability the real render chain would have produced. */
     M.syncAddAvailability();
     eq(M.add.tierFieldShown, true, "after the add: the grade select is shown again");
     eq(M.add.firstGradeFieldShown, false, "…and the First-grade field is hidden");
     eq(M.add.firstGrade, "", "…and its own value was cleared, not left for the next person");
 
-    /* (d, part 2) After the add, the placeholder is driven by the created
-       grade's own label (tierRole) rather than the now-cleared, now-hidden
-       First-grade field — proven by renaming the grade out from under it and
-       checking the placeholder follows the rename, not the value that
-       created it. */
     if(M.state.tiers[0]) M.state.tiers[0].label = "Managing Director";
     M.syncAddRolePlaceholder();
     eq(M.add.rolePlaceholder, "Managing Director",
       "…the role placeholder now follows the grade's own label, not the "
       + "cleared First-grade field");
 
-    /* Undo removes the person AND the grade created with it in the same step
-       — the trap named in the plan: hoisting the grade's creation above the
-       commit would leave it behind as an orphan the strip still shows. */
     M.undo();
     eq(countOf(M), 0, "undo: the person is gone");
     eq(M.state.tiers.length, 0,
@@ -2375,16 +1927,13 @@ async function runSuite(){
   }
 
   {
-    /* (e) A pending photo at zero grades follows the same precedent addFiles'
-       own batch already sets when it needs no pre-existing grade: the
-       destination does not exist yet to check, so only the generation may
-       be. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = [];
     M.setPendingDirectly({result:{data:"data:image/jpeg;base64,EEEE", w:50, h:50},
                           gen: M.docGen});
-    M.newGeneration();                // the document moved on while the photo decoded
+    M.newGeneration();
     M.setAdd({firstGrade:"Partner", name:"Ada"});
     eq(await M.addOnePerson(), false,
       "no grades, a stale pending-photo generation: addOnePerson reports no add");
@@ -2405,35 +1954,20 @@ async function runSuite(){
   }
 
   {
-    /* (f) The photo-import dialog is the one route left that still refuses
-       outright at zero grades, for a BATCH — addFiles' own plan finds nothing
-       to attach a batch photo to and so still has additions, and a batch
-       genuinely has nowhere to go, where Add and Paste can both build a grade
-       from what was typed or pasted instead. This drives addFiles() directly,
-       which is what a multi-photo drop reaches; a SINGLE dropped photo does
-       not reach this refusal at all — the drop route below sends it straight
-       to the Add dialog instead, which is where the zero-grade case is a
-       door (see the drop tests just below). */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = [];
     M.dirtyDoc = false;
 
     const alertsBeforePaste = M.alerts.length;
-    /* pasteList does not refuse at zero grades —
-       a zero-grade paste builds the structure FROM the list (pasteGradePlan),
-       so the dialog is the answer here, not a wall in front of it. */
+
     M.commands.pasteList();
     eq(M.alerts.length, alertsBeforePaste,
       "no grades: pasteList raises no alert of its own");
     eq(M.paste.entryShown, true, "no grades: …it opens the paste dialog instead");
     M.closePasteModal();
 
-    /* The import dialog answers the same condition at the same three layers, so
-       assert all three rather than only the outcome. It is ANSWERED here on
-       purpose — a cancelled import would never reach the third layer, and the
-       third layer is the one that has to hold when the button's disabled state
-       does not. */
     M.answerImportWith(M.state.tiers[0] && M.state.tiers[0].id);
     const dropped = M.addFiles([file("Ada_Lovelace.jpg")]);
     await tick();
@@ -2442,38 +1976,20 @@ async function runSuite(){
     eq(M.import.confirmDisabled, true, "no grades: and its Import button is disabled");
     eq(M.import.countShown, false, "no grades: the count gives way to the reason");
     eq(M.decodes.length, 0, "no grades: a dropped photo never reaches the decoder");
-    /* If the guard regresses, do not leave the suite parked on the mock decoder:
-       drain it so the assertions below see the illegal person it would create.
-       This branch is mutation-tested; awaiting addFiles directly instead would
-       leave a broken build printing neither PASS nor FAIL. */
+
     await settle(M);
     await dropped;
     eq(countOf(M), 0, "no grades: the photo-import route creates no unassigned person");
     eq(M.history.length, 0, "no grades: no history entry from the refused import");
     eq(M.dirtyDoc, false, "no grades: and no dirty flag");
-    /* One alert here, not two — the photo-import path is the only route
-       that refuses outright. Add's own refusal (tested above) needs an empty
-       typed grade, and pasteList raises no alert of its own at all. */
+
     check(M.alerts.length === alertsBeforePaste + 1
        && /under Structure/.test(M.alerts[M.alerts.length - 1]),
       "no grades: the one remaining refusing route names the one action that unblocks it");
   }
 
-  /* ---------------------------------------- 5b1b. a single dropped photo
-
-     Dropping ONE photo leads to the SAME Add
-     people dialog the split's face opens — one add surface, reached two ways
-     — unless its derived name already matches a still-photo-less person, in
-     which case it attaches with no dialog at all. Everything else (several
-     files, or a single file that already matches somebody) is still
-     addFiles' job, unchanged. zoneDrop (grabbed above, the real listener
-     body both drop targets share) is what is under test here; addFiles and
-     askImport themselves are exercised throughout the rest of this file. */
   {
-    /* (a) a single unmatched photo opens the Add dialog, prefilled, and
-       never asks the batch import dialog at all — no #importModal entry
-       appears in the modal log, which is what would exist if askImport had
-       been called. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -2484,10 +2000,7 @@ async function runSuite(){
     await tick();
     check(M.decodes.length === 1,
       "the dropped photo reaches the real decoder — got " + M.decodes.length);
-    /* Guarded: a mutation that routes this drop through addFiles instead
-       (asked, then cancelled — IMPORT_ANSWER defaults to null here) leaves
-       decodes empty rather than throwing, so the checks below still run and
-       report red by NAME instead of aborting the section. */
+
     if(M.decodes[0]) M.decodes[0].res({data:"data:image/jpeg;base64,GGGG", w:90, h:90});
     await settle(M);
     await drop;
@@ -2506,10 +2019,7 @@ async function runSuite(){
   }
 
   {
-    /* (b) a single photo whose derived name matches an existing, still-
-       photo-less person attaches to them with no dialog at all: addFiles'
-       own plan (reached through the drop route unchanged) is pure
-       attachment, so neither dialog has a question to ask. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -2526,16 +2036,13 @@ async function runSuite(){
     eq(grace.photo, IMG.data, "…the photo lands on the matched person");
     eq(countOf(M), 1, "…and nobody new was added");
     eq(M.history.length, 1, "…in one undo step");
-    /* (M.history[0] || {}) tolerates a mutation that routes this drop to the
-       dialog instead — nothing commits there, so history stays empty rather
-       than throwing on a read of an entry that was never made. */
+
     eq((M.history[0] || {}).label, "1 photo attached", "…labelled as an attach, not an add");
     eq(M.dirtyDoc, true, "…and the document is now dirty");
   }
 
   {
-    /* (c) a dropped batch with at least one addition still asks the batch
-       import dialog — unchanged from before the drop route existed. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -2552,9 +2059,7 @@ async function runSuite(){
   }
 
   {
-    /* (d) a dropped batch that is PURE attachment — every photo matches
-       somebody — asks nothing at all: the same guard step 1 gave addFiles is
-       reached here through the very same plan, not a second copy of it. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -2574,11 +2079,7 @@ async function runSuite(){
   }
 
   {
-    /* (e) the match predicate is photo-less people only — the SAME rule
-       addFiles' own plan has always used, driven here through the drop
-       route's own call to it. Someone who already has a photo does not
-       silently lose it to the next same-named drop; that drop is instead the
-       deliberate single add, exactly as an unmatched name would be. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -2588,10 +2089,7 @@ async function runSuite(){
 
     const drop = M.dropOn([file("Grace_Hopper.jpg")]);
     await tick();
-    /* Guarded the same way (a) is: a mutation that stops routing this drop
-       to the dialog sends it through addFiles instead, where an unanswered
-       import dialog (IMPORT_ANSWER is null here) cancels before decoding —
-       leaving decodes empty rather than throwing. */
+
     if(M.decodes[0]) M.decodes[0].res({data:"data:image/jpeg;base64,NEW", w:90, h:90});
     await settle(M);
     await drop;
@@ -2604,12 +2102,6 @@ async function runSuite(){
     eq(countOf(M), 1, "…nobody new was added either — Add still has to happen");
   }
 
-  /* ---------------------------------------- 5b2. the photo-import dialog
-
-     The two standing controls it replaced were set at one moment and silently
-     decided where a batch dropped much later would land. What has to be true of
-     the question that replaced them: it applies to every photo in the batch, it
-     names the count, one dialog serves any count, and Cancel means nobody. */
   {
     const M = makeModule();
     M.state = M.defaults();
@@ -2634,7 +2126,7 @@ async function runSuite(){
   }
 
   {
-    /* one dialog whatever the count — a single file is not special-cased */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -2655,7 +2147,7 @@ async function runSuite(){
   }
 
   {
-    /* Cancel imports nobody and leaves everything exactly as it was */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -2677,8 +2169,7 @@ async function runSuite(){
   }
 
   {
-    /* Nothing is remembered between imports. The whole point of asking is that
-       there is no default left behind to shape the next one. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -2686,10 +2177,6 @@ async function runSuite(){
     const first = M.addFiles([file("Ada_Lovelace.jpg")]);
     await settle(M); await first;
 
-    /* Type into the field the way a user would, so there is something to
-       remember. Without this the stub could never be dirty and the assertion
-       below would pass against a build that never clears it — which is exactly
-       what the mutation test caught. */
     M.import.group = "LON";
     M.import.tier = M.state.tiers[4].id;
 
@@ -2703,28 +2190,10 @@ async function runSuite(){
     eq(M.groupLabel(M.state, who(M, 1)), "", "so the second import takes its own answer");
   }
 
-  /* ---------------------------------------- 5b3. pasted rows that name no grade
-
-     The dialog asks nothing about which grade an unmatched row should go
-     to: those rows carry PASTE_NEW out of parsePasteText, and confirmPaste
-     resolves it to a grade called NEW inside the commit that adds the
-     people.
-
-     Driven here rather than in test/import.js because what matters is the
-     COMMIT — one grade for many rows, an existing one reused, and the grade
-     and the people arriving as a single undo step. A grade created outside
-     the commit passes every parse-level assertion and still leaves an orphan
-     in the strip after one undo, which is the failure this section exists for.
-
-     Every read below is tolerant of a mutation that adds nobody and creates no
-     grade. That is not defensive style for its own sake: a mutation that made
-     `M.state.people[0]` undefined threw here, and a throw abandons the rest of
-     the section, so what it left behind was a missing assertion printed as a
-     passing one. `tierOf`/`cell` fail the check instead of dying on it. */
   const tierOf = (M, i) => (M.state.people[i] || {}).tierId;
   const cell = (rows, r, c) => ((rows[r] || [])[c] != null ? rows[r][c] : "<no cell>");
   {
-    /* Every row names a grade the document has, so nothing needs NEW. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -2742,9 +2211,7 @@ async function runSuite(){
     check(!M.pasteNewTier(), "…and there is no grade called NEW to find");
     eq(countOf(M), 2, "both people were added");
     eq(M.history.length, 1, "in one undo step");
-    /* The fourth column reaches the created person — tolerant of a mutation
-       that drops a person outright, which must fail this check rather than
-       throw and abandon the rest of the section. */
+
     eq((M.state.people[0] || {}).role, "Country Head",
       "a pasted row's fourth column lands on the person's role");
     eq((M.state.people[1] || {}).role, "",
@@ -2752,11 +2219,7 @@ async function runSuite(){
   }
 
   {
-    /* The P5 distinction, which is the whole reason the count is off the
-       sentinel and not off r.unmatched: "Nobody" names no grade at all and is
-       therefore NOT unmatched, while "Zaphod" names one the document does not
-       have and is. Both are headed for NEW, and a summary counting `unmatched`
-       would say one row where there are two. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -2775,7 +2238,7 @@ async function runSuite(){
       + JSON.stringify(M.paste.summary));
     check(/a new grade called NEW/.test(M.paste.summary),
       "…and says where they are going");
-    /* the table's own Grade column, read off the cells the real preview built */
+
     const cells = M.pasteCells();
     eq(cells.length, 3, "the table has a row per parsed row");
     eq(cell(cells, 0, 1), "Partner", "a matched row's Grade column names its grade");
@@ -2787,18 +2250,13 @@ async function runSuite(){
     M.pasteAdd();
     eq(M.state.tiers.length, tiers0 + 1,
       "ONE grade is created for both rows that needed it, not one each");
-    /* `|| {}` so a mutation that creates no grade fails the reads below
-       instead of throwing and abandoning the rest of this block. */
+
     const made = M.pasteNewTier() || {};
     check(!!M.pasteNewTier(), "and it is findable as the NEW grade");
-    /* Against the CELL, not against the constant the cell was built from: the
-       claim worth making is that the preview named the grade the commit went on
-       to create, and comparing the grade's code to PASTE_NEW_CODE would only
-       restate that both sites read the same constant. */
+
     eq(made.code, cell(cells, 1, 1),
       "…carrying the code the preview's Grade column promised");
-    /* The shape, as a class check against another writer of a grade: a field
-       this one invented (or forgot) is how the writers drift apart. */
+
     eq(Object.keys(made).sort().join(","),
        Object.keys(M.newTier("Z", "Z")).sort().join(","),
       "…and exactly the fields newTier() writes — no more, no fewer");
@@ -2809,14 +2267,11 @@ async function runSuite(){
       "both sentinel rows landed in that one grade");
     eq(tierOf(M, 0), (M.state.tiers[0] || {}).id,
       "and the matched row still went where it matched");
-    /* The sentinel is resolved, not stored. A person carrying it would name no
-       grade at all and draw in no band. */
+
     check(M.state.people.every(p => p.tierId !== M.PASTE_NEW),
       "no person carries the sentinel into state");
     eq(M.pasteRows.length, 0, "and it does not outlive confirmPaste");
 
-    /* One undo, both halves. This is the assertion that goes red if the grade is
-       created above the commit instead of inside it. */
     eq(M.history.length, 1, "the people and the grade are ONE undo step");
     M.undo();
     eq(countOf(M), 0, "undo takes the people back");
@@ -2826,8 +2281,7 @@ async function runSuite(){
   }
 
   {
-    /* A second paste into the same document reuses the first NEW rather than
-       adding a second one beside it. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -2853,9 +2307,7 @@ async function runSuite(){
   }
 
   {
-    /* Renamed, the grade is still found — matchTierByGrade matches a code OR a
-       name, so a NEW grade someone relabelled is reused by whichever half still
-       says NEW. Here the code has been changed and the label has not. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -2865,7 +2317,7 @@ async function runSuite(){
     const made = M.pasteNewTier() || {};
     const tiers1 = M.state.tiers.length;
     made.code = "TBD";
-    made.label = "new";                       // matched case-insensitively
+    made.label = "new";
     M.openPasteModal();
     M.preview("Second Person");
     M.pasteAdd();
@@ -2875,9 +2327,7 @@ async function runSuite(){
   }
 
   {
-    /* replace empties the people and never the grades — and it needs the NEW
-       grade exactly as much as Add does, since emptying state.people cannot
-       remove the grade a pasted row is asking for. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -2894,10 +2344,7 @@ async function runSuite(){
   }
 
   {
-    /* At the grade limit with no NEW grade present, the paste cannot go through.
-       Refused the way the people limit is: the buttons are disabled at preview
-       time with the reason on them, and confirmPaste refuses anyway, because
-       `disabled` is a claim about the UI and not a lock on the path. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = [];
@@ -2908,19 +2355,14 @@ async function runSuite(){
     M.dirtyDoc = false;
     M.openPasteModal();
     M.preview("Nobody Fits");
-    /* Not "the document is at the grade limit" — the loop above just made that
-       true, and an assertion that restates its own setup went green under a
-       mutation. What is worth checking is that PREVIEWING committed nothing:
-       showPastePreview must decide the refusal without creating the grade it is
-       refusing to create. */
+
     eq(M.state.tiers.length, M.LIMITS.tiers,
       "previewing creates no grade — the refusal is decided without making one");
     eq(M.history.length, 0, "…and snapshots nothing");
     eq(M.paste.addDisabled, true, "at the grade limit: Add these is disabled");
     check(/at most \d+ grades/.test(M.paste.addTitle),
       "…and says why — got " + JSON.stringify(M.paste.addTitle));
-    /* Replace too. The people limit lets Replace through and says "replace
-       instead"; this one cannot, because replacing does not free a grade slot. */
+
     eq(M.paste.replaceDisabled, true,
       "at the grade limit: Replace roster is disabled as well — replacing frees no grade slot");
     check(M.paste.addTitle === M.paste.replaceTitle,
@@ -2928,9 +2370,7 @@ async function runSuite(){
 
     const before = JSON.stringify(M.state);
     M.pasteAdd();
-    /* check() rather than eq(): the document here is at the grade limit, so
-       eq() would print two sixty-grade rosters into the failure message and
-       bury every assertion after it. The counts below name what moved. */
+
     check(JSON.stringify(M.state) === before,
       "and confirmPaste refuses anyway, leaving the document byte-for-byte as it was");
     eq(countOf(M), 0, "nobody was added");
@@ -2939,8 +2379,7 @@ async function runSuite(){
     check(M.alerts.length === 1 && /at most \d+ grades/.test(M.alerts[0]),
       "…and the refusal is reported once, in the grade-limit wording — got "
       + JSON.stringify(M.alerts));
-    /* Reuse still works at the limit: the refusal is about CREATING a grade, not
-       about the sentinel. */
+
     M.state.tiers[0].code = "NEW";
     M.preview("Nobody Fits");
     eq(M.paste.addDisabled, false,
@@ -2952,11 +2391,7 @@ async function runSuite(){
   }
 
   {
-    /* The grade a paste creates is the grade COMMANDS.addGrade creates when its
-       two fields are left at their defaults. Asserted by running BOTH writers
-       and comparing them to each other — a test that checked the pasted grade
-       against PASTE_NEW_LABEL would be restating the constant the app had just
-       used, and went green under a mutation that moved both. */
+
     const A = makeModule();
     A.state = A.defaults();
     A.state.tiers = sixGrades();
@@ -2985,8 +2420,7 @@ async function runSuite(){
   }
 
   {
-    /* The alert wording is the one COMMANDS.addGrade uses. Asserted by running
-       both, so it cannot drift the way two string literals silently can. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = [];
@@ -3005,24 +2439,8 @@ async function runSuite(){
       "…in the identical sentence, not a fourth phrasing of the same limit");
   }
 
-  /* ---------------------------------- 5b3b. zero grades: the file brings its
-     own structure
-
-     A paste or CSV import into a document with no grades at all is not
-     refused: every distinct value in the Grade column becomes its own
-     grade, in the order it first appears, and only a row with an EMPTY
-     grade cell goes to NEW. pasteGradePlan is the one place that decides
-     this, and both showPastePreview and confirmPaste must read the same
-     answer from it — driven end to end here for the same reason 5b3 is: the
-     created grades and the people they hold have to land in ONE undo step,
-     which only a test that drives commit() can see. */
   {
-    /* Ada and Bob both say "Partner" (different casing — the SAME grade, and
-       the FIRST row's casing is what gets created); Cyd names a second grade;
-       Dee's row has no grade cell at all and is the only one that reaches
-       NEW. Expectations below are the test's own literals, never read back
-       off pasteGradePlan's output — a claim and its evidence from one place
-       agree no matter what that place says. */
+
     const M = makeModule();
     M.state = M.defaults();
     eq(M.state.tiers.length, 0, "a fresh document ships with no grades — the premise this block tests");
@@ -3034,8 +2452,7 @@ async function runSuite(){
     check(/1 row names no grade, and goes to a new grade called NEW/.test(M.paste.summary),
       "…and counts only the one row with an empty cell, not the two that matched "
       + "each other — got " + JSON.stringify(M.paste.summary));
-    /* Nothing is unmatched in this mode — the file defines the structure —
-       so the table names the group each row lands in with no ⚠. */
+
     const cells = M.pasteCells();
     eq(cell(cells, 0, 1), "Partner", "Ada's row shows the grade it will create");
     eq(cell(cells, 1, 1), "Partner",
@@ -3047,11 +2464,7 @@ async function runSuite(){
     eq(M.state.tiers.map(t => t.code).join(","), "Partner,Associate,NEW",
       "exactly three grades, in the order the list produced them — Partner and Associate "
       + "from first appearance in the Grade column, NEW appended after them for the empty cell");
-    /* code === label only for the grades the LIST itself produced (Partner,
-       Associate) — the trailing NEW grade goes through the pre-existing
-       PASTE_NEW resolution, whose code/label pair ("NEW" / "New grade") is
-       COMMANDS.addGrade's own default and stays that way, exactly as it does
-       with grades already present (5b3, 5b3-iii below). */
+
     ["Partner", "Associate"].forEach(code => {
       const t = M.state.tiers.find(x => x.code === code) || {};
       eq(t.code, t.label, "a grade the list's own Grade column creates carries the pasted "
@@ -3063,10 +2476,6 @@ async function runSuite(){
     eq(tierOf(M, 2), byCode("Associate"), "Cyd resolved to her own grade");
     eq(tierOf(M, 3), byCode("NEW"), "Dee's empty cell resolved to NEW");
 
-    /* 5b3b-ii: one undo step, both halves — the grades and the people. A grade
-       created above the commit instead of inside it survives the undo that
-       removes its people and leaves an orphan in the strip; this is the
-       assertion that would go red for that mistake. */
     eq(M.history.length, 1, "the three grades and the four people are ONE undo step");
     M.undo();
     eq(countOf(M), 0, "undo takes every pasted person back");
@@ -3074,11 +2483,7 @@ async function runSuite(){
   }
 
   {
-    /* 5b3b-iii: with grades already present, the mode condition must hold —
-       an unmatched row still goes to the single shared NEW, and never gets a
-       created grade of its own named after whatever it typed. This is the
-       test that would go red if the zero-grade condition were dropped (or
-       always true). */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -3094,12 +2499,8 @@ async function runSuite(){
     eq(tierOf(M, 0), made.id, "…and the row landed in it, exactly as it does with grades present today");
   }
 
-  /* 5b3b-iv: the grade limit, at the edge pasteGradePlan's own count is meant
-     to get right — distinct values plus ONE more only when an empty-cell row
-     exists AND none of the file's own values already normalizes to "new". */
   {
-    /* 60 distinct grades plus one empty-cell row need 61 — one over the
-       limit, so this paste can create nothing. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.dirtyDoc = false;
@@ -3121,8 +2522,7 @@ async function runSuite(){
       "the refusal is reported once, in the grade-limit wording");
   }
   {
-    /* 59 distinct grades plus one empty-cell row need exactly 60 — AT the
-       limit, not over it, so this one goes through. */
+
     const M = makeModule();
     M.state = M.defaults();
     let text = "";
@@ -3136,8 +2536,7 @@ async function runSuite(){
     eq(countOf(M), 60, "all 60 people were added");
   }
   {
-    /* 60 distinct values where one of them already normalizes to "new" needs
-       no 61st grade for the empty-cell rows — they reuse the file's own. */
+
     const M = makeModule();
     M.state = M.defaults();
     let text = "";
@@ -3156,31 +2555,16 @@ async function runSuite(){
     eq(tierOf(M, 60), madeNew.id, "…and the empty-cell row (the last one pasted) landed in it");
   }
 
-  /* ------------------------------ 5b4. one factory for a fresh grade
-
-     newTier() is the one place that builds a grade object literal from
-     nothing — a template's grades, Add grade, and the NEW grade a paste
-     makes all call it rather than each building their own. Asserted by
-     RUNNING all three and comparing their output to EACH OTHER — never to a
-     field list copied out of the factory, which is the same source
-     answering for itself and would go green under a mutation that moved the
-     factory and the expectation together. */
   {
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
 
-    /* Writer 1: a template. P is the option-less one — AS, C and the rest
-       state options, and the claim here is about the defaults. */
     const fromDefaults = (M.TEMPLATES.find(t => t.id === "big4-green") || {}).grades()[0];
-    /* Writer 2: Add grade, answered with the defaults its own dialog offers. */
+
     await M.commands.addGrade();
     const fromCommand = M.state.tiers[M.state.tiers.length - 1] || {};
-    /* Writer 3: the paste — in a SEPARATE document, because Add grade answered
-       with its defaults has just created a grade coded NEW and a paste into the
-       same document would correctly reuse it rather than create one. Reusing it
-       here would compare the second writer with itself and report three agreeing
-       writers when only two had run. */
+
     const P = makeModule();
     P.state = P.defaults();
     P.state.tiers = sixGrades();
@@ -3199,13 +2583,7 @@ async function runSuite(){
         name + " writes the same field set as the others — got " + shape(o));
       check(!("role" in o), name + " writes no role");
     }
-    /* The option-less defaults, pinned to LITERALS and not to each other.
-       Comparing the three writers against fromDefaults proves they agree — which
-       is worth proving, and three separate runs answer it — but it cannot say
-       WHAT they agree on, because all three now come from one factory: a mutation
-       that changed the factory's default moved every expectation with it and this
-       block went green. There is no second writer of these values left, by
-       design, so a literal is the only independent source available. */
+
     const DEFAULTS = {fill:"green", attach:false, merge:false, align:"center"};
     for(const [name, o] of writers){
       for(const k of Object.keys(DEFAULTS)){
@@ -3213,69 +2591,41 @@ async function runSuite(){
           name + "'s default " + k + " is " + JSON.stringify(DEFAULTS[k]));
       }
     }
-    /* And they still agree with each other, which is the claim a fourth writer
-       would break without touching the values above. */
+
     for(const [name, o] of writers){
       eq(JSON.stringify(Object.assign({}, o, {id:0, code:0, label:0})),
          JSON.stringify(Object.assign({}, fromDefaults, {id:0, code:0, label:0})),
         name + " agrees with the others on every field but the code and name");
     }
-    /* Distinct ids, or the factory is handing out one object. */
+
     const ids = writers.map(w => w[1].id);
     eq(new Set(ids).size, 3, "each call produces a fresh id");
 
-    /* The options still work — a factory that ignored them would pass everything
-       above, because everything above is about the defaults. Big 4 green's
-       second grade (Assistant) is the template grade that states all three. */
     const a = (M.TEMPLATES.find(t => t.id === "big4-green") || {}).grades()[1] || {};
     eq(a.fill, "white", "an option the caller passes is honoured (fill)");
     eq(a.attach, true, "…and attach");
     eq(a.align, "right", "…and align");
-    /* And they are still normalised: MBB blue's second grade (Associate
-       Partner) states merge, and the normalizer raises attach from it, on
-       this path as on every other. */
+
     const c = (M.TEMPLATES.find(t => t.id === "mbb-blue") || {}).grades()[1] || {};
     check(c.merge === true && c.attach === true,
       "normalizeGradeLinks still runs over a template's grades");
   }
 
-  /* The validator is deliberately NOT a fourth caller — it judges a grade someone
-     else wrote rather than creating one, and its per-field defaults exist to
-     decide what to report as a repair. That it nonetheless agrees on the SHAPE is
-     asserted in test/import.js §12, which is the suite that drives it. */
-
-  /* -------------------------- 5b5. openAddModal's optional grade
-
-     The roster heading's "+" says which grade it sits on. It replaces the
-     CHOICE only — the list is still rebuilt from state, so the dialog opened
-     from a heading offers every grade, not just that one. */
   {
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
-    /* Every read here is tolerant: a mutation that made newTier hand out one
-       id for every grade collapsed the filter below into an empty array and this
-       block THREW, abandoning the rest of the section. `at()` fails the check
-       instead of dying on it. */
+
     const at = i => (M.state.tiers[i] || {}).id;
     const third = at(3);
 
-    /* asked for: that grade is the selection, whatever was chosen last */
     M.setAdd({tier:at(0)});
     M.openAddModal(third);
     eq(M.add.tier, third, "openAddModal(id) opens on the grade it was given");
 
-    /* not asked for: unchanged behaviour — the previous choice is kept */
     M.openAddModal();
     eq(M.add.tier, third, "openAddModal() keeps whatever was chosen last");
 
-    /* An id that no longer names a grade falls back rather than selecting
-       nothing — a select whose value matches no option shows blank, and Add would
-       put the person nowhere. "Falls back" means the unchanged behaviour, and
-       that is TWO steps: the previous choice, and only then the first grade. Both
-       are asserted, because the second step alone is also what a build with no
-       existence check produces, and a test that only checked it could not tell
-       the two apart. */
     const gone = at(3);
     const stays = at(1);
     M.state.tiers = M.state.tiers.filter(t => t.id !== gone);
@@ -3283,14 +2633,12 @@ async function runSuite(){
       "…after removing exactly that grade and leaving the others — got "
       + M.state.tiers.length + " grade(s)");
 
-    /* step one: a live previous choice is what a dead id falls back TO */
     M.setAdd({tier:stays});
     M.openAddModal(gone);
     eq(M.add.tier, stays,
       "a deleted grade's id leaves the previous choice standing — it replaces the "
       + "choice only when it names a grade that exists");
 
-    /* step two: and only when that is unusable too does it reach the first grade */
     M.setAdd({tier:gone});
     M.openAddModal(gone);
     eq(M.add.tier, at(0),
@@ -3298,21 +2646,12 @@ async function runSuite(){
     check(M.add.tier !== "" && M.add.tier != null,
       "…so the dialog never opens with no grade selected");
 
-    /* The silent case the wrapper on #drop exists for: anything that is not a
-       grade id is simply not a grade, and the dialog opens as it always did.
-       Asserted so the fallback is known to be reached, rather than assumed —
-       this is what a PointerEvent would do if one arrived. */
     M.setAdd({tier:at(2)});
     M.openAddModal({type:"click", clientX:10});
     eq(M.add.tier, at(2),
       "an argument that is not a grade id changes nothing — it cannot select a grade");
   }
 
-  /* -------------------------- 5b6. openAddModal offers the existing groups
-
-     The evidence comes from a second source: state.groups is built here by
-     hand, as literals, and compared against what the real fillGroupOptions
-     wrote — not against anything the app itself computed. */
   {
     const M = makeModule();
     M.state = M.defaults();
@@ -3324,16 +2663,11 @@ async function runSuite(){
       "opening Add fills the group suggestion list from state.groups, in order — "
       + "got " + JSON.stringify(M.groupOptions));
 
-    /* A second open with a changed roster proves the list is rebuilt from state
-       each time, not left over from the first — the same no-memory contract
-       fillTierOptions keeps. */
     M.state.groups = [{id:"g4", label:"Munich"}];
     M.openAddModal();
     eq(JSON.stringify(M.groupOptions), JSON.stringify(["Munich"]),
       "…and reopening it rebuilds the list fresh from whatever state.groups holds now");
 
-    /* The Edit dialog's opener offers the same list — not syncEditModal, which
-       reruns on every render while the dialog stays open. */
     M.state.groups = [{id:"g5", label:"Zurich"}, {id:"g6", label:"Vienna"}];
     const jane = {id:"jane", name:"Jane", tierId:M.state.tiers[0].id, groupId:null};
     M.state.people = [jane];
@@ -3342,12 +2676,6 @@ async function runSuite(){
       "openEditModal fills the same suggestion list on open");
   }
 
-  /* -------------------------- 5b7. openAddModal clears a stale typed group
-
-     A typed group identifies who is about to be added, not what a future
-     visit to this dialog shares — unlike the grade choice (5b5), which
-     openAddModal keeps on reopen, a group left in the field from a dialog
-     closed earlier must not silently land on whoever is added next. */
   {
     const M = makeModule();
     M.state = M.defaults();
@@ -3363,11 +2691,6 @@ async function runSuite(){
       "…while the grade choice, unlike group, is the one field openAddModal keeps on reopen");
   }
 
-  /* ---------------------------------------- 5c. the Add people dialog
-
-     One person per Add, and the dialog stays open. The two halves of that are
-     asserted separately, because either can regress without the other: what
-     lands in the document, and what the four fields look like afterwards. */
   {
     const M = makeModule();
     M.state = M.defaults();
@@ -3376,10 +2699,7 @@ async function runSuite(){
     const tier = M.state.tiers[2].id;
 
     M.setAdd({tier:tier, group:"FRA", name:"Ada Lovelace", files:[]});
-    /* The answer Add & close acts on. It is a real return value rather than a
-       reading of state, because the caller cannot tell "added nobody" from
-       "added somebody" by looking: every refusal already left an alert on
-       screen, and closing the dialog over it is what this value prevents. */
+
     eq(await M.addOnePerson(), true, "a successful Add reports that it added somebody");
 
     eq(countOf(M), 1, "Add creates exactly one person");
@@ -3391,7 +2711,6 @@ async function runSuite(){
     eq(M.history.length, 1, "one added person is exactly one history entry");
     eq(M.dirtyDoc, true, "…and the document is dirty");
 
-    /* the dialog is ready for the next person without being reopened */
     eq(M.add.name, "", "after Add the name is cleared");
     eq(M.add.files.length, 0, "after Add the photo is cleared");
     eq(M.add.tier, tier, "after Add the grade is KEPT for the next person");
@@ -3401,23 +2720,12 @@ async function runSuite(){
     check(M.toasts.some(t => /1 person added/.test(t)), "the existing toast confirms it");
   }
 
-  /* ------------------------------------- 5c1. Role, added alongside Name
-
-     Role is per-person like Name — it identifies who is being added, not a
-     property the next person shares — so it reads into the created person and
-     then clears, alongside Group (also per-person now); Grade alone survives
-     the clear untouched. The placeholder is a second, independent claim: it
-     follows whichever grade is currently selected, through the very policy
-     (tierRole) syncEditModal already uses for #editRole, so switching grades
-     mid-dialog — before anything is typed — shows that grade's own name
-     rather than the previous grade's. */
   {
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
     const g0 = M.state.tiers[0], g1 = M.state.tiers[1];
 
-    /* (a) the typed role lands on the created person, verbatim */
     M.setAdd({tier:g0.id, group:"FRA", name:"Ada Lovelace", role:"Chief Cartographer"});
     eq(await M.addOnePerson(), true, "the add succeeds");
     eq(countOf(M), 1, "…creating one person");
@@ -3425,16 +2733,11 @@ async function runSuite(){
       "…carrying exactly the role literal the dialog held — got "
       + JSON.stringify(M.state.people[0] && M.state.people[0].role));
 
-    /* (b) after the add, Role clears with Name and Group while Grade persists */
     eq(M.add.role, "", "after Add the role is cleared, the same as name and photo");
     eq(M.add.group, "", "…and group clears too — the test's own literal "
       + "does not survive to the next person");
     eq(M.add.tier, g0.id, "…while the grade selection is kept");
 
-    /* (c) the placeholder follows the grade — two distinct label literals from
-       sixGrades(), never read back from the app's own tierRole output, so this
-       fails if syncAddRolePlaceholder stops tracking the selection or starts
-       answering from something other than the chosen grade's own label. */
     M.setAdd({tier:g0.id});
     M.syncAddRolePlaceholder();
     eq(M.add.rolePlaceholder, g0.label,
@@ -3446,7 +2749,6 @@ async function runSuite(){
       "…and switching the selection to a different grade flips it to THAT "
       + "grade's label ("+JSON.stringify(g1.label)+") — not the first grade's");
 
-    /* zero grades: nothing is selected, so there is nothing to print */
     M.setAdd({tier:""});
     M.syncAddRolePlaceholder();
     eq(M.add.rolePlaceholder, "",
@@ -3455,9 +2757,7 @@ async function runSuite(){
   }
 
   {
-    /* Five people from one open dialog is five entries — not one batch, and not
-       one per keystroke. The fields are read only when Add runs, so typing
-       cannot commit; that is what makes this count exact rather than lucky. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -3476,24 +2776,8 @@ async function runSuite(){
     eq(countOf(M), 4, "undo takes back exactly one of them");
   }
 
-  /* ------------------------------------- 5c2. the photo well
-                                                 (the choice, not the Add)
-
-     Decoding happens when the photo is CHOSEN. It has to decode to show
-     anything at all, so a FileReader preview would pay the same cost, show the
-     original rather than the downscaled image that gets stored, and leave every
-     refusal arriving one step late, at Add.
-
-     The price is one piece of state between the picker and Add, in a dialog
-     that deliberately stays open — and that is the whole risk: left behind, it
-     gives the next person the previous person's photo, silently. Everything
-     below is written around that single failure. */
   {
-    /* The photo goes through processImage — the same function addFiles calls,
-       which is where the byte-level JPEG/PNG check, the size limits and the
-       re-encode live. There is no second validation path to test, so what is
-       asserted here is that this one is reached at the picker, and that a
-       refusal leaves nothing behind that a later Add could pick up. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -3512,7 +2796,7 @@ async function runSuite(){
       + "not borrow addOnePerson's 'Nobody was added'");
     check(!M.alerts.some(x => /Nobody was added/.test(x)),
       "…and nothing here claims nobody was added, which is a different outcome");
-    /* the three views, all of them empty */
+
     eq(M.pending, null, "a refused file leaves nothing in the well");
     eq(M.add.files.length, 0,
       "…and clears the input, which must not go on naming a file the dialog refused");
@@ -3521,7 +2805,6 @@ async function runSuite(){
     eq(M.dirtyDoc, false, "…and no dirty flag — nothing in the document changed");
     eq(countOf(M), 0, "…and adds nobody");
 
-    /* and the person can still be added, without a picture */
     M.setAdd({tier:M.state.tiers[0].id, group:"", name:"Nope"});
     eq(await M.addOnePerson(), true,
       "the person can still be added afterwards, because the refusal was about "
@@ -3529,11 +2812,6 @@ async function runSuite(){
     eq(who(M, 0).photo, null, "…with no photo");
   }
 
-  /* ---------------------------------------- 5b2. the picker fills Name from
-     the file name — the courtesy the drop path already gives a batch, now
-     given to a photo chosen through the Add dialog too. nameFromFile and
-     clampText are the real ones (grabbed above), so this is the drop path's
-     own rule, not a second copy of it. */
   {
     const M = makeModule();
     M.state = M.defaults();
@@ -3551,11 +2829,7 @@ async function runSuite(){
       "…and the frame is still the default one — filling the name changes "
       + "nothing about the photo itself");
   }
-  /* ---------------------------------------- 5b2b. nameFromFile title-cases on
-     NON-LETTER boundaries, not ASCII \b — a letter after ä/ö/ü/ß stays as
-     typed instead of being pulled uppercase by JS's ASCII-only \b. Driven
-     through the same picker path as 5b2, so this is the real function every
-     call site uses, not a second copy of its rule. */
+
   for(const [filename, want, why] of [
     ["müller.jpg", "Müller",
       "a leading letter followed by a non-ASCII letter is title-cased once, "
@@ -3571,12 +2845,7 @@ async function runSuite(){
       + "must be left alone rather than turning \"ßler\" into \"SSler\""],
     ["grace_hopper.jpg", "Grace Hopper",
       "plain ASCII filenames are title-cased exactly as before"],
-    // macOS hands dropped filenames over NFD-decomposed: these three build
-    // the ü/ö as "letter" + U+0308 combining diaeresis by explicit escape,
-    // so no editor can silently recompose them back to NFC. The `want`
-    // literals stay the ordinary precomposed NFC (U+00FC/U+00D6) typed
-    // above, because nameFromFile must normalize its input before
-    // title-casing it.
+
     ["m" + "u\u0308" + "ller.jpg", "M\u00fcller",
       "a macOS NFD filename (u + U+0308 combining diaeresis, not the "
       + "precomposed \u00fc) must normalize to NFC before title-casing, or "
@@ -3589,10 +2858,7 @@ async function runSuite(){
       "a decomposed umlaut (o + U+0308) at the very start of the string "
       + "still earns exactly one capital, on the base letter, not on the "
       + "letter after the combining mark"],
-    // n + U+0304 combining macron has NO precomposed Unicode form, so NFC
-    // normalization leaves it exactly as typed \u2014 unlike the three cases
-    // above, this one can only be answered by the boundary-class fix
-    // itself (a combining mark must never open a title-case word).
+
     ["n" + "\u0304" + "andor.jpg", "N" + "\u0304" + "andor",
       "n + U+0304 combining macron has no precomposed NFC form, so "
       + "normalization cannot fold this case \u2014 the boundary class must "
@@ -3610,9 +2876,7 @@ async function runSuite(){
       + ", got " + JSON.stringify(M.add.name));
   }
   {
-    /* A typed name is never overwritten — choosing a photo (or replacing one)
-       must not clobber it, which is why the fill only happens when the field
-       is blank. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -3624,9 +2888,6 @@ async function runSuite(){
     eq(M.add.name, "Ada Lovelace",
       "a typed Name is untouched by choosing a photo — got " + JSON.stringify(M.add.name));
 
-    /* Replace photo, through the Add framing editor's own [data-fact]
-       click — the picker fires again, and the same rule has to hold the
-       second time through, with a photo already in the well. */
     M.addClickFact("replace");
     const replace = M.choosePhoto(file("Alan_Turing.jpg"));
     await tick();
@@ -3637,17 +2898,7 @@ async function runSuite(){
   }
 
   {
-    /* What the well holds is what the chart will store: processImage's
-       downscaled result, cropped by the chart's own rule. A preview computed a
-       second way would be a picture of something else. The DOM-level half of
-       that claim — that the well's own <img> is placed by frameRect at
-       PREVIEW_R — is what syncAddFramePreview does with the SAME frameRect and
-       placeFramePreview Edit's own syncFramePreview calls, both grabbed real
-       above; this suite's sandbox has no selector-capable DOM to read that
-       placement back off (Edit's own preview is untested here for the same
-       reason), so what is asserted is the state the shared preview is a
-       function of: the decoded bytes and dimensions, and the frame nothing
-       has touched yet. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -3687,12 +2938,7 @@ async function runSuite(){
   }
 
   {
-    /* THE regression this batch exists to prevent. The dialog stays open across
-       an Add, so a well that survives one hands the next person a face that is
-       not theirs — and nothing on screen would say so. A photo is four fields
-       and the layout reads every one of them, so all four are asserted: a tail
-       that cleared `photo` alone would leave pw, ph and a frame pointing at a
-       picture that is gone. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -3709,7 +2955,6 @@ async function runSuite(){
     eq(M.add.files.length, 0, "…the input is cleared with it");
     eq(M.add.wellShown, false, "…and the preview is gone");
 
-    /* the second person, added without touching the picker */
     M.setAdd({tier:tier, group:"FRA", name:"Grace"});
     eq(await M.addOnePerson(), true, "a second Add with no photo chosen succeeds");
     eq(countOf(M), 2, "…and adds a second person");
@@ -3724,9 +2969,7 @@ async function runSuite(){
   }
 
   {
-    /* The same across a close. A dialog closed with a photo in the well would
-       reopen holding one the user last saw before deciding against it — and
-       would hand it to whoever they added next. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -3744,18 +2987,11 @@ async function runSuite(){
     M.openAddModal();
     eq(M.pending, null, "and reopening finds it still empty");
     eq(M.add.wellShown, false, "…with no preview showing");
-    /* Open clears on its own account, not because Close already did. Asserted
-       against a well that is deliberately full at the moment Open runs: with
-       both clears in place either one would satisfy the pair above, so removing
-       one of them would go unnoticed. The claim is the same one the #addName
-       clear beside it makes — the dialog opens showing what the document says,
-       and nothing it was left holding. */
+
     {
       const again = M.choosePhoto(file("Ada.jpg"));
       await tick();
-      /* the newest decode, not decodes[0] — this module has already made one,
-         and re-resolving that settled promise would leave `again` pending for
-         ever and take the whole suite down with it */
+
       M.decodes[M.decodes.length - 1].res({data:"data:image/jpeg;base64,BBBB", w:100, h:120});
       await again;
       check(M.pending !== null, "…a photo chosen with the dialog open is in the well");
@@ -3771,11 +3007,7 @@ async function runSuite(){
   }
 
   {
-    /* Remove photo, through the Add framing editor's own
-       [data-fact="remove"] button — driven through the real delegated click
-       handler. It changes nothing in the document — the person it would
-       have belonged to does not exist yet — so the absence of a history
-       entry and of a dirty flag is the assertion, not an afterthought. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -3802,15 +3034,6 @@ async function runSuite(){
     eq(who(M, 0).photo, null, "and the person is added with no photo");
   }
 
-  /* ---------------------------------------- 5c2. the Add dialog's own
-     framing editor: what does NOT happen
-
-     Add "bekommt alles" — the same pan/zoom/reset framing editor Edit's
-     dialog shows, operating on addPending.frame before any person exists.
-     The cardinal rule, and the heart of this step: nothing here may touch
-     state, history, the dirty flag or the status bar — a framing session in
-     Add that left a trace in undo would be a defect no suite before this one
-     could catch, because addPending.frame did not exist before this batch. */
   {
     const M = makeModule();
     M.state = M.defaults();
@@ -3841,15 +3064,7 @@ async function runSuite(){
   }
 
   {
-    /* A full Add carries the edited frame into the new person — clamped once
-       more at commit time through the same clampFrame the framing editor
-       itself uses. The expected numbers are literals, not a second call to
-       clampFrame: they are worked out by hand against frameLimit's own
-       formula (§3958 in tierform_app.html), so the expectation comes from a
-       second writer rather than from the app's own answer compared with
-       itself. At w:200,h:100,zoom:1.5 the ox/oy clamp is max(0,1.5*2-1)=2 and
-       max(0,1.5-1)=0.5 — comfortably clear of the single 0.05 PAN_STEP taken
-       in each direction below, so neither pan is clamped. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -3874,12 +3089,6 @@ async function runSuite(){
     eq(who(M, 0).frame.ox, 0.05, "…the horizontal pan");
     eq(who(M, 0).frame.oy, 0.05, "…and the vertical pan");
 
-    /* Add & continue: the dialog stays open, and the well is what setAddPhoto
-       already clears — but the frame lives INSIDE addPending now, not beside
-       it, so what has to be proven here is that the NEXT photo chosen starts
-       fresh rather than carrying the just-added person's framing forward,
-       which would be the "next person gets the previous person's face" bug
-       this whole batch exists to prevent, one field further along. */
     const again = M.choosePhoto(file("Grace.jpg"));
     await tick();
     M.decodes[M.decodes.length - 1].res({data:"data:image/jpeg;base64,CCCC", w:100, h:100});
@@ -3890,14 +3099,7 @@ async function runSuite(){
   }
 
   {
-    /* The commit-time clamp specifically: a frame that is out of range for
-       its own photo (built directly, bypassing the framing handlers — which
-       never produce one, since every write of theirs goes through clampFrame
-       already) must still come out of addOnePerson clamped, not carried
-       through raw. At w:100,h:100,zoom:1.5 frameLimit's own formula gives
-       ox/oy <= max(0,1.5-1) = 0.5, so an ox/oy of 5 is expected to land at
-       exactly 0.5 — a literal worked out by hand, not a second call to
-       clampFrame or frameLimit. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -3913,11 +3115,7 @@ async function runSuite(){
   }
 
   {
-    /* Same rule the drop path obeys: an image decoded for a document that has
-       since been replaced must not land in the one on screen now. The gap is
-       wider than it was — the well can sit across a whole New — so the
-       generation the PICKER captured is what Add judges. Checked before
-       commit(), so a refusal leaves no snapshot and no dirty flag. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -3925,12 +3123,10 @@ async function runSuite(){
     await tick();
     M.decodes[0].res({data:"data:image/jpeg;base64,BBBB", w:100, h:120});
     await choice;
-    /* awaited, because New asks before it replaces: the whole document has to
-       be gone before Add runs, which is the case the generation guard is for */
-    await M.newDoc();                 // a whole new document, photo still in the well
+
+    await M.newDoc();
     M.dirtyDoc = false;
-    /* New ships no grades — this test is about the generation guard on the
-       photo, not about grades, so give the fresh document one to add into. */
+
     M.state.tiers = sixGrades();
     M.setAdd({tier:M.state.tiers[0].id, group:"", name:"Ada"});
     eq(await M.addOnePerson(), false,
@@ -3941,21 +3137,17 @@ async function runSuite(){
   }
 
   {
-    /* The generation belongs to the moment the decode STARTED, not to the
-       moment it finished. New can land while the picker is still decoding, and
-       a `gen` read after the await would be the new document's — which would
-       let a photo chosen for the old one attach to somebody in the new one. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
     const choice = M.choosePhoto(file("Ada.jpg"));
     await tick();
-    await M.newDoc();                 // a whole new document, mid-decode
+    await M.newDoc();
     M.decodes[0].res({data:"data:image/jpeg;base64,BBBB", w:100, h:120});
     await choice;
     M.dirtyDoc = false;
-    /* New ships no grades — this test is about the generation guard on the
-       photo, not about grades, so give the fresh document one to add into. */
+
     M.state.tiers = sixGrades();
     M.setAdd({tier:M.state.tiers[0].id, group:"", name:"Ada"});
     eq(await M.addOnePerson(), false,
@@ -3966,24 +3158,15 @@ async function runSuite(){
   }
 
   {
-    /* A drop batch decoding in the background planned its photo budget against
-       a roster the dialog is about to change. Rather than reason about two
-       imports interleaving, the picker takes the same turn addFiles and
-       addOnePerson take when they find themselves second — and leaves the well
-       empty, so nothing half-chosen is left to add. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
     M.answerImportWith(M.state.tiers[0].id, "");
     const batch = M.addFiles([file("Grace_Hopper.jpg")]);
-    await tick();                     // the batch is now parked on its decode
+    await tick();
     const before = M.decodes.length;
 
-    /* Not awaited yet, deliberately. A regression here starts a decode nobody
-       is going to resolve, and awaiting it would hang the whole run rather than
-       fail this section — the same defect as a mutation that throws, minus even
-       the error message. Everything is asserted off one tick, then settle()
-       drains whatever was started and the promise is safe to await. */
     const blocked = M.choosePhoto(file("Ada.jpg"));
     await tick();
     check(M.toasts.some(t => /Still importing the last batch/.test(t)),
@@ -3995,15 +3178,12 @@ async function runSuite(){
     eq(M.add.files.length, 0, "…and nothing in the input either");
     eq(M.add.wellShown, false, "…and no preview");
 
-    await settle(M); await batch; await blocked;   // let the batch finish, as it would
+    await settle(M); await batch; await blocked;
     M.setAdd({tier:M.state.tiers[0].id, group:"", name:"Ada"});
     await M.addOnePerson();
     eq(who(M, countOf(M) - 1).photo, null,
       "and the person added afterwards has no photo, because none was taken");
 
-    /* The other direction, which is the reason the picker TAKES the flag rather
-       than only reading it: a drop that arrives while the dialog is decoding
-       would plan its budget against a roster the dialog is about to change. */
     const held = countOf(M);
     const slow = M.choosePhoto(file("Ada.jpg"));
     await tick();
@@ -4014,24 +3194,19 @@ async function runSuite(){
     check(M.toasts.slice(seen).some(t => /Still importing the last batch/.test(t)),
       "a drop arriving while the picker is decoding is turned away too — the "
       + "picker holds importBusy across its decode, not just across the check");
-    /* drained before either is awaited, for the same reason as above: a drop
-       that was NOT turned away is parked on a decode nobody will resolve */
+
     await settle(M); await late; await slow;
     eq(countOf(M), held, "…so the drop imports nobody while the dialog is decoding");
   }
 
   {
-    /* The budget is measured against the roster, which the picker cannot see,
-       so it still refuses at Add — and the photo stays in the well. That is
-       what makes the refusal recoverable: remove the photo, add the person
-       without one. A tail that emptied the well on this path would take away
-       the only thing the user can act on. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
     const tier = M.state.tiers[0].id;
     const big = "data:image/jpeg;base64," + "A".repeat(M.LIMITS.photoBytes - 100);
-    /* a roster already most of the way through the budget */
+
     while(M.encodedPhotoBytes(M.state) + big.length <= M.LIMITS.totalPhotoBytes){
       const p = personIn(M, "Filler");
       p.photo = big; p.pw = 10; p.ph = 10; p.frame = {zoom:1, ox:0, oy:0};
@@ -4062,28 +3237,14 @@ async function runSuite(){
   }
 
   {
-    /* photoBudgetExceeded is the one decision point addFiles' batch sum and
-       #fileSwap's single replacement both defer to, and the two differ only
-       in whether an old photo's bytes come out first. Proven at a boundary
-       chosen so the subtraction is load-bearing rather than incidental: a
-       roster totalling exactly 49,000,000 bytes, replacing a 1,000,000-byte
-       photo (O) with a 2,000,000-byte one (N), fits ONLY because O is
-       subtracted first —
-         49,000,000 - 1,000,000 + 2,000,000 = 50,000,000 <= 50,331,648 (48 MB)
-       Withhold the subtraction (removedBytes 0, as a straight add always
-       passes) and the identical addition is
-         49,000,000 + 2,000,000 = 51,000,000 > 50,331,648
-       Both expectations below are that literal arithmetic, typed out — not a
-       second call to photoBudgetExceeded, and not encodedPhotoBytes' own
-       total re-added by hand, either of which would be the claim and its
-       evidence coming from the same place. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
     const ada = personIn(M, "Ada Lovelace");
-    ada.photo = "A".repeat(1000000);       // O: the photo about to be replaced
+    ada.photo = "A".repeat(1000000);
     const filler = personIn(M, "Filler");
-    filler.photo = "A".repeat(48000000);   // brings the roster to 49,000,000 bytes total
+    filler.photo = "A".repeat(48000000);
     M.state.people.push(ada, filler);
 
     eq(M.LIMITS.totalPhotoBytes, 50331648,
@@ -4098,9 +3259,7 @@ async function runSuite(){
   }
 
   {
-    /* The one-owner rule, driven rather than described: a well written by hand
-       is a photo the dialog will add and is not showing. test/dom.js forbids
-       the assignment statically; this proves what it would cost. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -4113,17 +3272,6 @@ async function runSuite(){
     eq(M.pending, null, "…and the owner is what puts them back in agreement");
   }
 
-  /* ---------------------------------------- 5d. Remove photo goes back to initials
-
-     The route that did not exist: a photo could be added, replaced and
-     reframed, but the only way to take one away was to remove the person and
-     add them again, which costs their grade, group, role and position.
-
-     Driven through the real [data-fact] click handler rather than by calling
-     applyPhoto — the whole risk here is the handler clearing p.photo by hand
-     and leaving pw, ph and a stale frame behind, which a suite that called
-     applyPhoto itself could never see. A photo is four fields, and every one
-     of them is read by the layout. */
   {
     const M = makeModule();
     M.state = M.defaults();
@@ -4141,24 +3289,17 @@ async function runSuite(){
 
     M.clickFact("remove", ada.id);
 
-    /* all four together — this is the assertion the item exists for */
     eq(ada.photo, null, "Remove photo clears the photo");
     eq(ada.pw, 0, "…and the stored pixel width with it");
     eq(ada.ph, 0, "…and the height");
     eq(ada.frame, null, "…and the framing, which would otherwise be left pointing "
       + "at a picture that is gone");
 
-    /* everything the person is, other than their picture */
     eq(ada.name, "Ada Lovelace", "the person keeps their name");
     eq(ada.tierId, tier, "…their grade");
     eq(M.groupLabel(M.state, ada), "BER", "…their group");
     eq(ada.role, "Head of Thing", "…and their role");
 
-    /* What separates this from data-act="del". Read through a name() that
-       tolerates a missing slot: a mutation that DID delete the person leaves
-       people[2] undefined, and reaching .name off it throws — which abandons
-       the rest of this section instead of failing it, and a mutation that
-       throws is not a pass. */
     const name = i => (M.state.people[i] || {}).name || "(nobody there)";
     eq(countOf(M), 3, "the person is still in the roster — this is not a delete");
     eq(M.state.people.indexOf(ada), 1, "…in the position they were in");
@@ -4167,13 +3308,12 @@ async function runSuite(){
 
     eq(M.history.length, 1, "removing a photo is exactly one history entry");
     eq(M.dirtyDoc, true, "…and marks the document dirty");
-    /* same reason: no history entry at all must fail this, not throw on it */
+
     const label = (M.history[0] || {}).label;
     check(/photo/.test(label || ""),
       "…labelled as a photo removal, so the undo entry reads — got "
         + JSON.stringify(label));
 
-    /* one undo, all four back */
     M.undo();
     const back = M.state.people[1] || {};
     eq(back.photo, "data:image/jpeg;base64,AAAA", "undo restores the photo");
@@ -4185,9 +3325,7 @@ async function runSuite(){
   }
 
   {
-    /* A person with no photo. The button is not rendered for them, but the
-       branch must not throw if it is reached anyway — and it must not invent
-       a history entry for a change that changes nothing visible. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -4200,16 +3338,6 @@ async function runSuite(){
     eq(countOf(M), 1, "…and certainly does not remove the person");
   }
 
-
-  /* ---------------------------------------- 5e. the Edit person dialog is live
-
-     Editing a person happens through a dialog, and the property edit()
-     exists for is what makes it work: a burst of typing is ONE history
-     entry, not one per keystroke. Everything here is driven through the
-     dialog's real listeners, because the edit() KEY that groups a burst is
-     written in those bodies and nowhere else — a suite that called edit()
-     itself would choose its own key and go on passing after the app
-     changed one. */
   {
     const M = makeModule();
     M.state = M.defaults();
@@ -4221,36 +3349,19 @@ async function runSuite(){
     M.openEditModal(jane.id);
     eq(M.editId, jane.id, "the dialog is open on that person");
     eq(M.editFields.name.value, "Jane", "and shows the name they already have");
-    /* Resolved fresh every time, never held: undo restores a CLONE, so the
-       object this test pushed stops being the one in the document the moment
-       anything is undone — and assertions against it would then be about
-       nobody. This is the same reason staleWrite compares by identity. */
+
     const who = () => M.state.people[0] || {};
 
-    /* one field, one burst */
     for(const v of ["J", "Ja", "Jan", "Jane Q"]) M.typeInto("name", v);
     eq(who().name, "Jane Q", "the last keystroke is on the person immediately");
     eq(M.history.length, 1, "…and the whole burst is one history entry");
     eq(M.dirtyDoc, true, "…which marks the document dirty");
-    /* No undo here: an undo at this point would end the typing session,
-       which would make the NEXT assertion unfalsifiable — group could not
-       join the name burst even under a mutation that gave the two handlers
-       one edit() key, because there would be no open session left to join.
-       The burst is undone in its own scenario below instead. */
 
-    /* A different field is a different session, so it does not join the burst.
-       Typed to a value the fixture does NOT already hold — personIn() seeds
-       every person with FRA, and typing that back would be an assertion the
-       handler could fail and still pass. */
     eq(M.groupLabel(M.state, who()), "FRA", "this person starts with an group");
     for(const v of ["B", "BE", "BER"]) M.typeInto("group", v);
     eq(M.groupLabel(M.state, who()), "BER", "the group field writes to the person too");
     eq(M.history.length, 2, "…as its own entry, because a new field ends the old session");
-    /* Jane is the only person in this document, so every keystroke leaves
-       whichever group her groupId pointed at with zero members the instant
-       it moves off — "FRA" (personIn's starting group), then "B", then
-       "BE" are each pruned in turn by the pruneGroups() call inside edit(),
-       and only the group her groupId currently names survives. */
+
     eq(M.state.groups.length, 1, "typing B, BE, BER leaves exactly one group — the transients were pruned");
     eq((M.state.groups[0] || {}).label, "BER",
       "…and it is labelled BER, not one of the letters typed on the way there");
@@ -4258,23 +3369,16 @@ async function runSuite(){
     eq(who().role, "Head", "and so does the role field");
     eq(M.history.length, 3, "…again as one entry of its own");
 
-    /* the grade is a discrete choice, so it is a commit rather than a session */
     const second = M.state.tiers[1].id;
     M.chooseGrade(second);
     eq(who().tierId, second, "choosing a grade moves the person into it");
     eq(M.history.length, 4, "…in one more history entry — four fields, four entries");
-    /* Each entry names its own field, so the undo list reads as a list of
-       edits rather than four copies of one word. Read off the labels the app
-       wrote, compared against what each handler says it is doing. */
+
     const labels = M.history.map(h => h.label);
     check(/renamed/.test(labels[0]) && /group/.test(labels[1])
        && /role/.test(labels[2]) && /grade/.test(labels[3]),
       "and each entry names the field it came from — got " + JSON.stringify(labels));
 
-    /* all the way back to the person as they were opened. Undone by exhausting
-       canUndo() rather than by counting presses: the first undo after a live
-       change spends itself pushing that state as the redo target, so "four
-       entries" and "four presses" are not the same number. */
     let guard = 20;
     while(M.canUndo() && guard--) M.undo();
     eq(who().name, "Jane", "undoing every entry restores the name");
@@ -4284,8 +3388,6 @@ async function runSuite(){
     eq(M.editId, jane.id, "and none of it closed the dialog");
   }
 
-  /* The other half of what edit() is for, on its own so that nothing has ended
-     the session before the assertion runs: a burst goes back in ONE press. */
   {
     const M = makeModule();
     M.state = M.defaults();
@@ -4301,11 +3403,6 @@ async function runSuite(){
     eq(M.canUndo(), false, "…and there was only ever one step to undo");
   }
 
-  /* ---- a second person typing the same group (any case) reuses the group,
-     never mints a second one. resolveGroupId's own dedupe, driven through the
-     real #editGroup listener for a second person this time — the first
-     person's group already exists ("BER", case-sensitive) when the second
-     one types the lowercase form. */
   {
     const M = makeModule();
     M.state = M.defaults();
@@ -4333,11 +3430,6 @@ async function runSuite(){
       "one group total, not two — got " + JSON.stringify(M.state.groups));
   }
 
-  /* ---- a group's last member leaving prunes it, and undo brings both the
-     person's group membership AND the group itself back — packState/
-     unpackState round-trip the whole document through history, so this is
-     really the same invariant commit()/edit() keep live, checked across an
-     undo boundary rather than only immediately after the mutation. */
   {
     const M = makeModule();
     M.state = M.defaults();
@@ -4362,10 +3454,6 @@ async function runSuite(){
       "…still reading back as FRA, the same label it had before the commit");
   }
 
-  /* ---- removing the photo swaps the section, and only the section ---------
-     The one thing that must not happen is the dialog going away underneath a
-     name half typed into it. Driven through the real [data-fact] handler and
-     then through the real renderRoster path, so the swap is the app's own. */
   {
     const M = makeModule();
     M.state = M.defaults();
@@ -4377,7 +3465,7 @@ async function runSuite(){
                         frame:{zoom:1.6, ox:12, oy:-4}});
     M.state.people.push(ada);
     M.openEditModal(ada.id);
-    /* the state it opens in: a framing editor, because there is a photo */
+
     const withPhoto = M.photoSection();
     check(withPhoto.verbs.indexOf("fact:pan") >= 0
        && withPhoto.verbs.indexOf("fact:remove") >= 0,
@@ -4403,11 +3491,10 @@ async function runSuite(){
     check(/AL/.test(without.text),
       "…beside the initials, which is what the chart draws for them now — got "
         + JSON.stringify(without.text));
-    /* the fields are still showing the person, not emptied by the rebuild */
+
     eq(M.editFields.name.value, "Ada Lovelace", "the name field is untouched by the swap");
     eq(M.editFields.group.value, "BER", "…and so is the group field");
 
-    /* and it goes back */
     M.undo();
     const back = M.state.people[0] || {};
     eq(back.photo, "data:image/jpeg;base64,AAAA", "undo restores the photo");
@@ -4416,11 +3503,6 @@ async function runSuite(){
       "…and the section is the framing editor again — got " + JSON.stringify(again.verbs));
   }
 
-  /* ---- one route out of the document, reached from two places -------------
-     The row menu's Remove and the dialog's Remove person are two faces of
-     removePerson(). What proves it is not that both call it — it is that the
-     document and the history entry they leave behind are the same, compared
-     against each other rather than against a string written here. */
   {
     function afterRemoval(via){
       const M = makeModule();
@@ -4464,17 +3546,12 @@ async function runSuite(){
     eq(viaDialog.toast, viaMenu.toast,
       "…and the same toast — got " + JSON.stringify([viaMenu.toast, viaDialog.toast]));
     eq(viaDialog.dirty, true, "either route marks the document dirty");
-    /* the one thing the two routes differ in, and it is the right way round */
+
     eq(viaDialog.editId, null, "removing from the dialog closes it — it was editing nobody");
     viaMenu.M.undo();
     eq(viaMenu.M.state.people.length, 3, "and one undo brings the person back");
   }
 
-  /* ---- Move up and Move down, from the menu -------------------------------
-     They were two buttons in the row and they are two items in its menu; the
-     behaviour did not move with them. Driven through the menu's real click
-     handler, which resolves the label BEFORE the mutation — afterwards the
-     person is already in the grade the label is trying to name. */
   {
     const M = makeModule();
     M.state = M.defaults();
@@ -4485,7 +3562,6 @@ async function runSuite(){
     M.state.people.push(ana, bo, cy);
     const order = () => M.state.people.map(p => p.name + "@" + T.indexOf(p.tierId));
 
-    /* inside a grade: a plain reorder */
     M.openMenuOn(ana.id);
     M.clickMenu("down", ana.id);
     eq(JSON.stringify(order()), JSON.stringify(["Bo@0", "Ana@0", "Cy@1"]),
@@ -4493,21 +3569,18 @@ async function runSuite(){
     eq((M.history[0] || {}).label, "moved Ana",
       "…and says only that, because nothing else about them changed");
 
-    /* across the boundary: the last of a grade goes into the next one */
     M.clickMenu("down", ana.id);
     eq(JSON.stringify(order()), JSON.stringify(["Bo@0", "Ana@1", "Cy@1"]),
       "Move down off the end of a grade moves the person into the next grade");
     eq((M.history[1] || {}).label, "moved Ana to " + M.gradeName(M.state.tiers[1]),
       "…and the entry names the grade they left for, resolved before the move");
 
-    /* and back up again, which is the same rule in reverse */
     M.clickMenu("up", ana.id);
     eq(JSON.stringify(order()), JSON.stringify(["Bo@0", "Ana@0", "Cy@1"]),
       "Move up carries them back across the boundary");
     eq((M.history[2] || {}).label, "moved Ana to " + M.gradeName(M.state.tiers[0]),
       "…naming the grade on the other side");
 
-    /* the ends refuse, and refuse without adding to the history */
     const entries = M.history.length;
     M.clickMenu("up", M.state.people[0].id);
     eq(JSON.stringify(order()), JSON.stringify(["Bo@0", "Ana@0", "Cy@1"]),
@@ -4516,13 +3589,10 @@ async function runSuite(){
       "…though the press still records one, exactly as the row's disabled "
       + "button never let it get that far — the guard is on the control, not here");
 
-    /* three undos and the roster is as it started */
     M.undo(); M.undo(); M.undo(); M.undo();
     eq(JSON.stringify(order()), JSON.stringify(["Ana@0", "Bo@0", "Cy@1"]),
       "and undo walks every one of those moves back");
   }
-
-  /* ---------------------------------------------------------- 4. undo history is per-document */
 
   {
     const M = makeModule();
@@ -4534,8 +3604,6 @@ async function runSuite(){
     M.state.people = [];
     eq(M.canUndo(), true, "there is something to undo before opening another file");
 
-    /* starting a new document must not leave the old one's history behind —
-       undoing into it would resurrect people who belong to a different roster */
     M.dirtyDoc = false;
     M.setConfirm(true);
     await M.newDoc();
@@ -4544,13 +3612,10 @@ async function runSuite(){
     M.undo();
     eq(countOf(M), 0, "an undo in the new document cannot pull in the old one's people");
 
-    /* resetPerRoster also drops an open framing panel, whose person id is stale */
     M.snapshot("x");
     M.resetPerRoster();
     eq(M.history.length, 0, "resetPerRoster clears history");
   }
-
-  /* ---------------------------------------------------------- 5. Open */
 
   {
     const M = makeModule();
@@ -4567,15 +3632,6 @@ async function runSuite(){
     eq(M.picked, 1, "Open confirmed: the file picker opens");
   }
 
-  /* ------------------------------------------- 6. there is no migration step */
-
-  /* migrate() is gone. It did two jobs: it filled in fields a file omitted, and
-     it upgraded two long-dead file shapes. The first was a duplicate —
-     parseAndValidateRoster answers for every field independently, and is the
-     only door a roster comes through — and the second had no files left to
-     upgrade. What has to stay true is that a NEW document states everything
-     itself, so nothing downstream is relying on a defaulting pass that no
-     longer exists. The file half of this lives in test/import.js. */
   {
     const M = makeModule();
     const d = M.defaults();
@@ -4589,10 +3645,7 @@ async function runSuite(){
     }
     check(d.tiers.every(t => t.role === undefined),
       "and no default grade carries a title of its own");
-    /* groups is an array, and a new document starts with none — checked as a
-       shape (Array.isArray + length), not eq(d.groups, [], …), since eq's
-       === would fail on any two distinct empty arrays regardless of what
-       defaults() actually returns. */
+
     check(Array.isArray(d.groups) && d.groups.length === 0,
       "a new document starts with no groups either — got " + JSON.stringify(d.groups));
     check(typeof M.migrate === "undefined",
@@ -4601,10 +3654,7 @@ async function runSuite(){
 
   {
     const M = makeModule();
-    /* ---- 6c. switching layout is one ordinary document change.
-       The point of the whole feature is that nothing else moves: the angle, the
-       attach/share flags and every person stay exactly as they were, so a user
-       can look at the same roster both ways and lose nothing. */
+
     {
       const F = makeModule();
       F.state = F.defaults();
@@ -4633,9 +3683,6 @@ async function runSuite(){
       eq(F.state.angle, 4, "switching back finds the angle the user last chose");
     }
 
-    /* ---- 6c2. changing which part of a name is bold follows the same
-       one-commit, one-undo-step shape as every other Design selector — this
-       replays what the #nameBold change listener does, not a second path. */
     {
       const F = makeModule();
       F.state = F.defaults();
@@ -4654,8 +3701,6 @@ async function runSuite(){
       eq(F.state.nameBold, "family", "redo returns to family-name-bold");
     }
 
-    /* ---- 6d. it survives a Save and an Open, which is the only durable
-       storage this app has. */
     {
       const F = makeModule();
       F.state = F.defaults();
@@ -4665,16 +3710,8 @@ async function runSuite(){
       await F.saveDoc(false);
       const written = JSON.parse((F.written[F.written.length - 1] || {}).text || "{}");
       eq(written.layout, "swimlanes", "a swimlanes roster is saved as swimlanes");
-      /* What the file STATES is what re-opening reads; the validator half is
-         test/import.js, which drives the real door. */
-      eq(JSON.parse(JSON.stringify(written)).layout, "swimlanes",
-         "and the file itself says so, so re-opening cannot turn it back into a pyramid");
     }
 
-    /* Save's last-line check. Nothing in the app can produce an unsupported
-       layout today; this is the guard for the day something can. One grade,
-       so this is about the LAYOUT field and not masked by the empty-grades
-       refusal §1 already proves. */
     const st = M.defaults();
     st.tiers = sixGrades();
     eq(M.stateLimitProblem(st), null, "a pyramid document is saveable");
@@ -4688,42 +3725,11 @@ async function runSuite(){
        "but a document with no layout at all is not a limit violation — it is a pyramid");
   }
 
-  /* ---------------------------------------------------------- 7. the real roster file opens */
-
-  /* Reads a committed fixture, not a file that may or may not be sitting in the
-     project root. The previous version skipped silently when it was absent, so
-     28 assertions could vanish from a run with nothing but a note above the
-     summary — the same "green while asserting nothing" trap the harness had. */
-  {
-    let raw = null;
-    try{ raw = readFile(here() + "test/fixtures/current.json"); }catch(e){ raw = null; }
-    check(!!raw, "test/fixtures/current.json is readable — the real-file check needs it");
-    if(raw){
-      const M = makeModule();
-      /* Read as written. The fixture is in the shape the app saves, so nothing
-         normalises it on the way in — which is exactly what makes it worth
-         asserting that the shape is complete. */
-      const m = JSON.parse(raw);
-      check(Array.isArray(m.people) && m.people.length > 0, "real file: it has people");
-      check(Array.isArray(m.tiers) && m.tiers.length > 0, "real file: it has grades");
-      for(const p of m.people){
-        if(p.photo) check(p.pw > 0 && p.ph > 0, "real file: every photo states pixel dimensions");
-        else check(p.frame === null || p.frame === undefined, "real file: photo-less people carry no frame");
-      }
-    }
-  }
-
-  /* ---------------------------------------------------------- 7b. commit() and edit() */
-
-  /* Before this existed, roughly a third of the mutation sites called snapshot()
-     and the rest changed the document with no way back. These assertions are the
-     reason that cannot quietly happen again. */
   {
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
 
-    /* --- commit: one discrete change, one history step */
     M.commit("added someone", () => { M.state.people.push(personIn(M, "One")); });
     eq(countOf(M), 1, "commit applies the mutation");
     eq(M.history.length, 1, "commit records exactly one history entry");
@@ -4747,7 +3753,7 @@ async function runSuite(){
   }
 
   {
-    /* --- edit: one continuous change, one history step however many events */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -4761,10 +3767,6 @@ async function runSuite(){
     eq(p.name, "Jane", "every keystroke in a session is applied");
     eq(M.history.length - before, 1, "four keystrokes make one history entry, not four");
 
-    /* The name handler relabels the row after each of those keystrokes, because
-       the row is not re-rendered while it is being typed in. That is a DOM
-       repair and not a change to the document: an undo step that visibly does
-       nothing is worse than none, and one per keystroke would bury the rename. */
     {
       const steps = M.history.length, idx = M.hIndex, open = M.session;
       const name = p.name;
@@ -4774,10 +3776,6 @@ async function runSuite(){
       eq(p.name, name, "it changes nothing about the person");
       check(M.session === open, "nor does it disturb the typing session it runs inside");
 
-      /* The flags have to be watched from a document nobody has edited yet.
-         Checked mid-session they are already set, so a markDirty() in here
-         would change nothing observable and the assertion would pass on a
-         function that had quietly made the document unsaved. */
       const F = makeModule();
       F.state = F.defaults();
       F.state.tiers = sixGrades();
@@ -4788,18 +3786,16 @@ async function runSuite(){
       eq(F.dirtyDoc, false, "nor mark the document as having unsaved work");
       eq(F.history.length, 0, "and records nothing to undo");
     }
-    /* the whole rename is still one entry with the relabels interleaved */
+
     eq(M.history.length - before, 1, "a rename is one history entry, not two");
 
     M.undo();
     eq(M.state.people[0].name, "", "undo restores the value from before the session, not one character");
 
-    /* a different field is a different session */
     M.redo();
     M.edit("group:" + p.id, "group", () => { M.state.people[0].groupId = "HAM"; });
     eq(M.history.length, 2, "a different field opens its own session");
 
-    /* and so is the same field after the session was closed */
     M.endEdit();
     M.edit("group:" + p.id, "group again", () => { M.state.people[0].groupId = "BER"; });
     eq(M.history.length, 3, "editing the same field after a pause is a new step");
@@ -4808,10 +3804,7 @@ async function runSuite(){
   }
 
   {
-    /* --- edit: the group-axis label follows the same one-continuous-change
-       shape as a person's name above — "groupsLabel" is the exact session
-       key #groupsLabel's own input listener uses (edit("groupsLabel", …)),
-       so a session keyed on it here replays what the real control does. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -4828,7 +3821,7 @@ async function runSuite(){
   }
 
   {
-    /* --- a discrete change must close an open session, or the two would merge */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -4841,7 +3834,6 @@ async function runSuite(){
       role:"Zed", fill:"green", attach:false, merge:false, align:"center"}); });
     check(M.session === null, "a commit closes the open typing session");
 
-    /* text -> structure -> undo -> redo, the sequence most likely to interleave */
     eq(M.state.tiers.length, 7, "the grade was added");
     M.undo();
     eq(M.state.tiers.length, 6, "undo removes the grade");
@@ -4855,7 +3847,7 @@ async function runSuite(){
   }
 
   {
-    /* --- a new change after an undo discards the redo branch */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -4870,10 +3862,7 @@ async function runSuite(){
   }
 
   {
-    /* --- save then edit then undo: the dirty flag must track the document, not
-       the history. Undoing back to a saved state still counts as unsaved work,
-       because the file on disk and the editor have diverged and converged again
-       without the app being able to prove it. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -4884,23 +3873,12 @@ async function runSuite(){
     eq(M.dirtyDoc, true, "an edit after saving marks it dirty again");
     M.undo();
     eq(M.dirtyDoc, true, "undoing back to the saved content still reads as unsaved");
-    /* and the status icon reports that flag rather than second-guessing it —
-       the icons must not tempt anyone into adding a document comparison */
+
     M.updateDocLabel();
     eq(M.shown.unsaved, true, "and the status icon still shows unsaved, following the flag");
     eq(M.shown.status, "Unsaved changes", "with the status name to match");
   }
 
-  /* ------------------------------------------- 7b1. the Accent hex field
-
-     <input type="color"> is the operating system's dialog: on Windows it offers
-     no hex field at all, and on macOS it is behind a tab. For a tool whose job
-     is matching one specific brand colour, that could not be the only way in.
-
-     The field is an addition, and everything below is about it being the SAME
-     control as the picker rather than a rival to it: one value, one validator,
-     one undo step. Driven through the real listeners, so a rule retyped into
-     this suite cannot go on passing after the app stops applying it. */
   {
     const M = makeModule();
     M.state = M.defaults();
@@ -4908,7 +3886,6 @@ async function runSuite(){
     const start = M.state.accent;
     M.setColourFields(start, start);
 
-    /* --- a valid hex sets the accent and repaints */
     const renders = M.history.length;
     M.typeHex("#123456");
     eq(M.state.accent, "#123456", "a valid hex typed into the field sets state.accent");
@@ -4916,23 +3893,19 @@ async function runSuite(){
     check(M.summaries > 0, "…and the ribbon summary refreshes, which is what repaints the swatch");
     eq(M.history.length - renders, 1, "…as one history entry");
 
-    /* --- the leading # is optional, and what is stored is normalised */
     M.endEdit();
     M.typeHex("046a38");
     eq(M.state.accent, "#046A38",
       "a value typed without the leading # is accepted, and stored as upper-case #RRGGBB");
     eq(M.colour.picker, "#046A38", "…and the picker takes the normalised form too");
-    /* the field itself is left alone mid-session: normalising under the caret
-       moves it. Blur is where it is tidied. */
+
     eq(M.colour.hex, "046a38", "the field is NOT rewritten while it is being typed in");
     M.hexBlur();
     eq(M.colour.hex, "#046A38", "leaving the field shows the normalised value");
   }
 
   {
-    /* --- nothing incomplete or invalid may reach the document.
-       Typing three of six characters must leave the chart alone rather than
-       repaint through five wrong colours on the way to the right one. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -4951,7 +3924,6 @@ async function runSuite(){
     eq(M.dirtyDoc, false, "nor marked the document dirty");
     eq(M.colour.picker, start, "nor moved the picker");
 
-    /* the validator is the shared one, not a second rule that could drift */
     eq(M.hexFieldValue("046a38"), "#046A38", "hexFieldValue normalises through validColour");
     eq(M.hexFieldValue("#046A3"), null, "…and answers null for anything validColour refuses");
     eq(M.hexFieldValue("  #046a38  "), "#046A38", "…trimming exactly as validColour does");
@@ -4960,7 +3932,7 @@ async function runSuite(){
   }
 
   {
-    /* --- picking from the swatch updates the field */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -4971,10 +3943,7 @@ async function runSuite(){
   }
 
   {
-    /* --- one typed value is ONE history entry, and one undo restores it.
-       This is the file's existing edit() coalescing under the SAME session key
-       the picker uses — not a second mechanism. Typing a colour character by
-       character is the case that would otherwise cost seven undos. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -4994,8 +3963,6 @@ async function runSuite(){
     M.redo();
     eq(M.state.accent, "#123456", "and redo puts the typed one back");
 
-    /* Switching from typing to dragging mid-session stays one change: the two
-       halves share the session key, which is the whole reason they share it. */
     const M2 = makeModule();
     M2.state = M2.defaults();
     M2.state.tiers = sixGrades();
@@ -5011,16 +3978,14 @@ async function runSuite(){
   }
 
   {
-    /* --- the contrast warning still runs on a value set this way.
-       The real checkContrast and the real WCAG arithmetic, so this fails if the
-       threshold moves or the handler stops calling it. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
     M.state.inkOnColour = "#FFFFFF";
     M.setColourFields(M.state.accent, M.state.accent);
 
-    M.typeHex("#FFFF00");                    // white on yellow: about 1.07:1
+    M.typeHex("#FFFF00");
     check(M.warn.shown, "a low-contrast accent typed into the field raises the warning");
     check(/on the accent/.test(M.warn.text), "…naming the pair that is hard to read");
     check(/is below the recommended 4\.5:1 contrast/.test(M.warn.text),
@@ -5030,17 +3995,13 @@ async function runSuite(){
       "…because the shipped ratio really is below the shipped threshold");
 
     M.endEdit();
-    M.typeHex("#1A2129");                    // white on near-black: about 15:1
+    M.typeHex("#1A2129");
     check(!M.warn.shown, "and a readable one clears it again");
     check(!M.warn.badge, "…badge included");
   }
 
   {
-    /* --- this is the chart's accent, not the app's chrome.
-       --brand is fixed: the chart colour is the user's and can be anything,
-       including one that would make the white chrome text unreadable. Asserted
-       as what the handler wrote, so a line reaching for a CSS variable fails
-       here rather than in a screenshot. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -5057,22 +4018,6 @@ async function runSuite(){
       "the header's brand text is untouched — a different field with a similar name");
   }
 
-  /* ------------------------------------------- 7b1a. the eight curated accents
-
-     Accent is a menu now, and the eight rows in it are the fast route to a
-     colour that works. Each writes TWO document fields, because three of the
-     eight need black text on them — an accent applied with the previous
-     colour's ink is a curated colour that ships an unreadable chart, which is
-     the one thing curating a list is for.
-
-     Driven through the real COMMANDS entry and the real checkContrast, so the
-     curation is asserted against the shipped WCAG arithmetic rather than a table
-     of ratios retyped into this suite. */
-  /* Read out of the markup that draws them rather than retyped here. A list
-     copied into this suite would go on certifying eight colours as readable
-     after the app started shipping different ones — which is the failure this
-     block exists to prevent. test/dom.js is where the eight are pinned by name;
-     here they are only whatever the menu actually offers. */
   const SWATCHES = (function(){
     const out = [];
     const re = /<button class="accent-swatch"[^>]*data-accent="(#[0-9A-Fa-f]{6})"[^>]*data-ink="(#[0-9A-Fa-f]{6})"[^>]*>[\s\S]*?<\/span>([^<]+)<\/button>/g;
@@ -5089,7 +4034,6 @@ async function runSuite(){
     const start = M.state.accent, startInk = M.state.inkOnColour;
     M.setColourFields(start, start, startInk);
 
-    /* --- both writes, one history entry */
     const steps = M.history.length;
     M.clickSwatch("#FF4F00", "#000000", "International Orange");
     eq(M.state.accent, "#FF4F00", "a swatch sets state.accent");
@@ -5098,7 +4042,6 @@ async function runSuite(){
       "…as ONE history entry covering both — two would leave a step showing one "
       + "colour wearing the other colour's ink");
 
-    /* --- and one undo restores both, in a single step */
     M.undo();
     eq(M.state.accent, start, "one undo restores the previous accent");
     eq(M.state.inkOnColour, startInk, "…and the previous ink, in the same step");
@@ -5108,9 +4051,7 @@ async function runSuite(){
   }
 
   {
-    /* --- the three controls showing these two values follow. commit()'s
-       render:"chart" repaints the chart and not the ribbon, so the swatch has to
-       put them back in step itself; undo goes the other way, through renderAll. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -5125,9 +4066,7 @@ async function runSuite(){
   }
 
   {
-    /* --- none of the eight raises the contrast warning. That is the whole point
-       of a curated list: a colour you have to go and fix after choosing it is
-       not a shortcut. */
+
     const M = makeModule();
     for(const s of SWATCHES){
       M.state = M.defaults();
@@ -5142,9 +4081,7 @@ async function runSuite(){
         "…because the shipped ratio really is at or above the shipped threshold — "
         + M.contrastRatio(s[0], s[1]).toFixed(2) + ":1");
     }
-    /* The ink is the swatch, not a decoration on it: every one of the eight is
-       unreadable with the other ink. A swatch that wrote only the colour would
-       hand three of them white text and five of them black. */
+
     const wrong = SWATCHES.filter(s =>
       M.contrastRatio(s[0], s[1] === "#000000" ? "#FFFFFF" : "#000000") < M.CONTRAST_MIN);
     eq(wrong.length, 8,
@@ -5152,9 +4089,7 @@ async function runSuite(){
   }
 
   {
-    /* --- a typed hex is not a swatch. It sets the accent and leaves the ink
-       alone: a typed value is the user's own colour, and the text colour that
-       goes on it is theirs too — the Text editor is where they said so. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -5167,8 +4102,7 @@ async function runSuite(){
   }
 
   {
-    /* --- a swatch is a discrete choice, so two of them are two undo steps, and
-       one after a typed value does not swallow it. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -5195,9 +4129,7 @@ async function runSuite(){
   }
 
   {
-    /* --- a button whose pair does not survive validColour changes nothing.
-       The values arrive as data attributes, which are strings like any other,
-       and this is the same door the Open path judges a roster file's accent at. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -5214,13 +4146,6 @@ async function runSuite(){
     eq(M.dirtyDoc, false, "…nor marks the document dirty");
   }
 
-  /* ------------------------------------------- 7b2. attach / share is one rule
-
-     merge implies attach, and the first grade can do neither. The four
-     transitions are asserted as the USER performs them — through commit(), so
-     each is exactly one undo step — because the bug this rule replaces was
-     reachable in two clicks and left a grade sharing a band it was not attached
-     to, which the renderers have no meaning for. */
   {
     const M = makeModule();
     const links = () => M.state.tiers.map(t => (t.attach ? "A" : "-") + (t.merge ? "S" : "-"));
@@ -5235,7 +4160,7 @@ async function runSuite(){
 
     M.state = M.defaults();
     M.state.tiers = sixGrades();
-    /* the shipped default already obeys the rule */
+
     eq(M.state.tiers[0].attach, false, "the first grade never attaches");
     eq(M.state.tiers[0].merge,  false, "and never shares");
     const a = M.state.tiers.findIndex(t => t.code === "A");
@@ -5245,7 +4170,6 @@ async function runSuite(){
     eq(M.state.tiers[c].merge,  true,  "defaults: C shares SC's band");
     eq(M.state.tiers[c].attach, true,  "and the rule gives shared C attach to match");
 
-    /* --- the four transitions, on a grade that starts detached --- */
     const i = M.state.tiers.findIndex(t => t.code === "D");
     M.state.tiers[i].attach = false; M.state.tiers[i].merge = false;
 
@@ -5259,19 +4183,15 @@ async function runSuite(){
     set(i, "merge", false);
     eq(links()[i], "A-", "Share off: clears share, LEAVES attach");
 
-    set(i, "merge", true);                     // back to shared for the next case
+    set(i, "merge", true);
     set(i, "attach", false);
     eq(links()[i], "--", "Attach off: clears attach AND share");
 
-    /* --- each transition is ONE undo step, not two --- */
     M.undo();
     eq(links()[i], "AS", "undo restores both flags in one step");
     M.redo();
     eq(links()[i], "--", "and redo takes both away again");
 
-    /* --- turning Share on from nothing is also ONE step ---
-       On a fresh module, so the count is not capped by HISTORY_MAX after the
-       transitions above. */
     {
       const F = makeModule();
       F.state = F.defaults();
@@ -5291,12 +4211,11 @@ async function runSuite(){
       eq(F.state.tiers[j].merge,  false, "and share with it");
     }
 
-    /* --- reordering: whoever becomes first cannot keep either flag --- */
     M.state = M.defaults();
     M.state.tiers = sixGrades();
     const share = M.state.tiers.findIndex(t => t.merge);
     check(share > 1, "the shared grade starts below the top");
-    /* move it up until it is first, the way the panel's Left button does */
+
     for(let k = share; k > 0; k--){
       const j = k;
       M.commit("moved", () => {
@@ -5306,11 +4225,10 @@ async function runSuite(){
       });
     }
     eq(links()[0], "--", "a grade moved to the top loses attach and share");
-    /* and the grade now second still refers to whatever is above it */
+
     check(M.state.tiers.length > 1, "there is still a grade below it");
     eq(typeof M.state.tiers[1].merge, "boolean", "the grade below keeps a well-formed share flag");
 
-    /* --- drag-and-drop uses the same rule, in one undoable move --- */
     {
       const F = makeModule();
       F.state = F.defaults();
@@ -5344,7 +4262,6 @@ async function runSuite(){
         "a stale dragged id cannot reorder the document");
     }
 
-    /* --- deleting the top grade promotes the next one --- */
     M.state = M.defaults();
     M.state.tiers = sixGrades();
     M.state.tiers[1].attach = true; M.state.tiers[1].merge = true;
@@ -5354,7 +4271,6 @@ async function runSuite(){
     });
     eq(links()[0], "--", "deleting the top grade clears the promoted grade's flags");
 
-    /* --- the helper itself is idempotent --- */
     const twice = M.defaults();
     M.normalizeGradeLinks(twice.tiers);
     const once = JSON.stringify(twice.tiers);
@@ -5362,8 +4278,6 @@ async function runSuite(){
     eq(JSON.stringify(twice.tiers), once, "normalizeGradeLinks is idempotent");
     check(stepsAfterShare >= 0, "the history advanced through these transitions");
   }
-
-  /* ---------------------------------------------------------- 7c. photos are not copied per step */
 
   {
     const M = makeModule();
@@ -5373,13 +4287,11 @@ async function runSuite(){
     const A = "data:image/jpeg;base64,AAAA";
     const B = "data:image/jpeg;base64,BBBB";
 
-    /* two people sharing one picture, one with a different one */
     const p1 = personIn(M, "Shared One"); p1.photo = A; p1.pw = 400; p1.ph = 300;
     const p2 = personIn(M, "Shared Two"); p2.photo = A; p2.pw = 400; p2.ph = 300;
     const p3 = personIn(M, "Other");      p3.photo = B; p3.pw = 400; p3.ph = 300;
     M.state.people.push(p1, p2, p3);
 
-    /* twenty edits that never touch an image */
     for(let i = 0; i < 20; i++){
       M.commit("edit " + i, () => { M.state.title = "Title " + i; });
     }
@@ -5388,12 +4300,10 @@ async function runSuite(){
     eq(M.photoStore.size, 2,
        "twenty steps over three photos hold two entries — one per distinct image");
 
-    /* the live document still carries real bytes; only history is by reference */
     eq(M.state.people[0].photo, A, "the live state keeps the actual data URL");
     check(M.state.people[0].photoId === undefined,
           "the live state carries no store id — that is a history-only concept");
 
-    /* a round trip through the boundary is lossless */
     M.state.showGradeCode = false;
     M.state.showGradeName = true;
     M.state.nameLabelPosition = "next";
@@ -5415,25 +4325,7 @@ async function runSuite(){
     check(back.people.every(p => p.photoId === undefined),
        "unpacking leaves no store id behind in live state");
     eq(JSON.stringify(back), JSON.stringify(M.state), "pack/unpack is a lossless round trip");
-    /* document-level settings cross the boundary untouched — packState copies the
-       state wholesale, which is what keeps a new property like this from having
-       to be added to a whitelist to survive an undo */
-    eq(packed.layout, "pyramid", "the layout crosses into history");
-    eq(back.layout, "pyramid", "and comes back out of it");
-    eq(packed.showGradeCode, false, "the hidden-code choice crosses into history");
-    eq(packed.showGradeName, true, "the shown-name choice crosses into history");
-    eq(back.showGradeCode, false, "and the hidden-code choice comes back out");
-    eq(back.showGradeName, true, "and the shown-name choice comes back out");
-    eq(packed.nameLabelPosition, "next", "the name-label position crosses into history");
-    eq(back.nameLabelPosition, "next", "and the name-label position comes back out");
-    eq(packed.showPersonName, false, "the hidden person-name choice crosses into history");
-    eq(packed.showPersonGrade, false, "the hidden person-grade choice crosses into history");
-    eq(packed.showPersonGroup, true, "the shown person-group choice crosses into history");
-    eq(back.showPersonName, false, "and the hidden person-name choice comes back out");
-    eq(back.showPersonGrade, false, "and the hidden person-grade choice comes back out");
-    eq(back.showPersonGroup, true, "and the shown person-group choice comes back out");
 
-    /* undoing across a photo change must bring the picture back */
     M.commit("removed a photo", () => {
       M.state.people[2].photo = null; M.state.people[2].pw = 0;
       M.state.people[2].ph = 0; M.state.people[2].frame = null;
@@ -5444,7 +4336,7 @@ async function runSuite(){
   }
 
   {
-    /* --- the store must not grow forever: entries no history step references go */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -5452,7 +4344,6 @@ async function runSuite(){
     p.pw = 10; p.ph = 10;
     M.state.people.push(p);
 
-    /* replace the picture more times than the history is deep */
     for(let i = 0; i < 25; i++){
       M.commit("replaced " + i, () => { M.state.people[0].photo = "data:image/jpeg;base64,X" + i; });
     }
@@ -5460,17 +4351,10 @@ async function runSuite(){
       "evicted history steps release their photos — store holds " + M.photoStore.size
       + ", expected no more than the 15-step history plus a little slack");
 
-    /* opening another document drops the previous one's photos entirely */
     M.resetPerRoster();
     eq(M.photoStore.size, 0, "a new document starts with an empty photo store");
   }
 
-  /* ------------------------------------------------------- 7d. dialogs, not confirm() */
-
-  /* confirm() and prompt() are gone. They blocked the thread, could not be
-     labelled, and in some browsers can be suppressed entirely — a user who
-     ticks "don't show me these again" silently loses the unsaved-work guard.
-     What matters here is that the guard still guards. */
   {
     const M = makeModule();
     M.state = M.defaults();
@@ -5492,7 +4376,6 @@ async function runSuite(){
     check(q.label && q.label !== "OK",
       'the confirming button has a real verb, not "OK" — got ' + JSON.stringify(q.label));
 
-    /* New and Open must both go through it, and both must obey a refusal */
     M.setConfirm(false);
     M.state.people.push(personIn(M, "Still Here"));
     const n = countOf(M);
@@ -5508,7 +4391,7 @@ async function runSuite(){
   }
 
   {
-    /* Save As uses a text dialog; cancelling it must change nothing at all */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -5525,19 +4408,8 @@ async function runSuite(){
     eq(q.value, "keep-me", "pre-filled with the current name");
   }
 
-  /* ------------------------------------------- 8. async results and a moving document */
-
-  /* Decoding an image is slow enough to outlive the document it was started
-     for. Everything below is the same shape: begin an import, change the
-     document while a decode is still pending, then let it finish. The result
-     must land nowhere — and "nowhere" has to include the undo stack and the
-     dirty flag, not just the roster, because an entry saying "2 people added"
-     above a roster where nothing appeared is its own kind of data loss. */
-
   {
-    /* the happy path first: with nothing moving, an import still imports.
-       Without this, every assertion below would also pass if the guard simply
-       refused everything. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -5555,7 +4427,7 @@ async function runSuite(){
   }
 
   {
-    /* New, halfway through the batch */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -5566,7 +4438,7 @@ async function runSuite(){
     await tick();
     eq(M.decodes.length, 1, "the batch is mid-decode");
 
-    M.dirtyDoc = false;                 // so New does not stop to ask
+    M.dirtyDoc = false;
     await M.newDoc();
     check(M.docGen !== gen, "New advances the document generation");
 
@@ -5582,8 +4454,7 @@ async function runSuite(){
   }
 
   {
-    /* Open, halfway through the batch — the same replacement by a different
-       route, so it goes through resetPerRoster() the way #jsonPick does */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -5593,7 +4464,7 @@ async function runSuite(){
     const run = M.addFiles([file("Ada_Lovelace.jpg")]);
     await tick();
 
-    M.state = M.defaults();             // what a successful Open does
+    M.state = M.defaults();
     M.state.tiers = sixGrades();
     M.docName = "someone-elses"; M.dirtyDoc = false;
     M.resetPerRoster();
@@ -5608,8 +4479,7 @@ async function runSuite(){
   }
 
   {
-    /* Replacing every grade stays inside the same document, so this is the case
-       the generation exists to cover deliberately rather than incidentally. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -5622,9 +4492,6 @@ async function runSuite(){
     M.setConfirm(true);
     await M.applyTemplate("big4-green");
 
-    /* Undo brings the original ids back. The tier check would therefore accept
-       the old batch; only the generation still proves it belongs to the
-       structure that was intentionally replaced. */
     M.undo();
     eq(M.state.tiers[0].id, tier,
       "undoing applyTemplate brings back the batch's destination id");
@@ -5641,12 +4508,7 @@ async function runSuite(){
   }
 
   {
-    /* Clear roster is the case with no second line of defence at all. It keeps
-       every grade, so the batch's destination still exists and staleWrite's
-       tierId test is satisfied; the people it would create never existed, so
-       the identity test has nothing to say about them either. The generation is
-       the only thing standing between a cleared roster and a batch of new
-       people appearing in it a second later. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -5659,9 +4521,7 @@ async function runSuite(){
 
     M.setConfirm(true);
     await M.commands.clearRoster();
-    /* Read through a default, not off the array: a mutation that made this
-       command take the grades with it would throw here and abandon everything
-       below, which reads in a report exactly like coverage. */
+
     eq((M.state.tiers[0] || {}).id, tier,
       "clearing the roster leaves the batch's destination grade standing");
     const steps = M.history.length;
@@ -5676,33 +4536,33 @@ async function runSuite(){
     check(/document changed/.test(M.alerts[0] || ""), "the reason names the document change");
   }
 
-  /* All whole-collection actions are undoable, so the order matters: advancing
-     the generation after commit would leave a window where an old photo batch
-     could still land. applyTemplate is a standalone function, not a COMMANDS
-     entry, so it is read out on its own rather than through the cmd loop. */
   {
-    const src = /async function applyTemplate\(id\)\{[\s\S]*?\n\}/.exec(SCRIPT);
-    check(!!src, "applyTemplate is where it is expected to be");
-    if(src){
-      const g = src[0].indexOf("newGeneration()");
-      const c = src[0].indexOf("commit(");
-      check(g >= 0, "applyTemplate advances the document generation");
-      check(g >= 0 && c >= 0 && g < c, "and does so before applyTemplate commits the change");
-    }
-  }
-  for(const cmd of ["clearGrades", "clearRoster"]){
-    const src = new RegExp(cmd + ":\\s*async\\s*\\(\\)\\s*=>\\s*\\{[\\s\\S]*?\\n  \\},").exec(SCRIPT);
-    check(!!src, "COMMANDS." + cmd + " is where it is expected to be");
-    if(src){
-      const g = src[0].indexOf("newGeneration()");
-      const c = src[0].indexOf("commit(");
-      check(g >= 0, cmd + " advances the document generation");
-      check(g >= 0 && c >= 0 && g < c, "and does so before " + cmd + " commits the change");
-    }
+    const M = makeModule();
+    M.state = M.defaults();
+    M.state.tiers = sixGrades();
+    const tier = M.state.tiers[0].id;
+    M.answerImportWith(tier);
+    const run = M.addFiles([file("Ada_Lovelace.jpg")]);
+    await tick();
+
+    M.setConfirm(true);
+    await M.commands.clearGrades();
+    M.undo();
+    eq((M.state.tiers[0] || {}).id, tier, "Undo Clear grades restores the pending batch's destination");
+    const before = JSON.stringify(M.state);
+    const steps = M.history.length;
+    M.dirtyDoc = false;
+
+    await settle(M);
+    await run;
+    eq(JSON.stringify(M.state), before, "a batch spanning Clear grades and Undo changes no document data");
+    eq(M.history.length, steps, "a batch spanning Clear grades and Undo adds no history");
+    eq(M.dirtyDoc, false, "a batch spanning Clear grades and Undo marks nothing unsaved");
+    check(/document changed/.test(M.alerts[0] || ""), "Clear grades invalidates a pending batch even after Undo");
   }
 
   {
-    /* the destination grade is deleted while the batch decodes */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -5727,9 +4587,7 @@ async function runSuite(){
   }
 
   {
-    /* ...but the grade only matters when a new person needs one. A batch that
-       is entirely photos for people who already exist must not be thrown away
-       because an unrelated grade was deleted. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -5751,7 +4609,7 @@ async function runSuite(){
   }
 
   {
-    /* one person leaves the roster mid-batch; the rest of the batch is fine */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -5777,8 +4635,7 @@ async function runSuite(){
   }
 
   {
-    /* Replace photo: the happy path, so the guard below is proved to be
-       discriminating rather than simply broken */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -5796,7 +4653,7 @@ async function runSuite(){
   }
 
   {
-    /* Replace photo: the person is deleted while it decodes */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -5820,7 +4677,7 @@ async function runSuite(){
   }
 
   {
-    /* Replace photo: the whole document is replaced while it decodes */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -5844,10 +4701,7 @@ async function runSuite(){
   }
 
   {
-    /* Replace photo across an undo. The document is the same one, and a person
-       with the same id is still there — but it is a different object, because
-       undo restores a copy. Writing into the captured one would change nothing
-       anybody can see, while still costing an undo step and a dirty flag. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -5858,7 +4712,7 @@ async function runSuite(){
     const run = M.swapChange({target:{files:[file("new.jpg")], value:""}});
     await tick();
 
-    M.state = JSON.parse(JSON.stringify(M.state));    // what undo() hands back
+    M.state = JSON.parse(JSON.stringify(M.state));
     const clone = M.state.people.find(p => p.id === ada.id);
     check(!!clone && clone !== ada, "the roster now holds a copy, not the captured object");
     M.dirtyDoc = false;
@@ -5873,8 +4727,7 @@ async function runSuite(){
   }
 
   {
-    /* A generation check must not be a generation *guess*: an ordinary edit is
-       not a new document, and an import spanning one has to complete. */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -5892,8 +4745,7 @@ async function runSuite(){
   }
 
   {
-    /* staleWrite() itself, at the boundaries — it is the single decision point
-       and every caller trusts its null to mean "go ahead" */
+
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
@@ -5907,89 +4759,10 @@ async function runSuite(){
     check(M.staleWrite(M.docGen, {tierId:"nope"}), "a missing grade is refused");
     check(M.staleWrite(M.docGen, {person: personIn(M, "Ghost")}),
       "a person who is not in the roster is refused");
-    /* the generation is checked first: a stale document is the more informative
-       reason, and re-checking ids inside a document that is gone is meaningless */
+
     check(/document changed/.test(M.staleWrite(M.docGen - 1, {tierId:"nope"})),
       "the document check comes before the target checks");
   }
-
-/* ---------------------------------------------------------- 9. no storage left behind */
-
-  {
-    /* comments legitimately explain why the storage layer was removed, so this
-       has to look at code only or the explanation trips its own check */
-    const CODE = SCRIPT.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/^[ \t]*\/\/.*$/gm, " ");
-    const dead = ["sget","sset","sdel","storageLive","persistActive","switchRoster",
-                  "createRoster","deleteRoster","renameRoster","renderRosterBar",
-                  "K_INDEX","K_ACTIVE","K_ROSTER","teamchart:index","teamchart:roster"];
-    for(const name of dead){
-      check(!CODE.includes(name), "the storage layer is fully gone: no " + name);
-    }
-    check(!/window\.storage/.test(CODE), "nothing reaches for window.storage");
-    /* migrate() does not exist, for its own reasons — see section 6. What
-       must remain is the door: parseAndValidateRoster is the one way a
-       roster file comes in. */
-    check(!/function migrate\(/.test(SCRIPT), "no migrate() is left behind");
-    check(/function parseAndValidateRoster\(/.test(SCRIPT),
-      "and parseAndValidateRoster is still the one way a roster file comes in");
-  }
-
-/* ---------------------------------------------------------- 9b. the roster panel
-   toggle is pure UI state
-
-   toggleRoster is a document-agnostic view preference: no commit(), no
-   edit(), no snapshot, no dirty flag, and nothing New or Open would need to
-   reset. Read the handler's own source rather than trust the surrounding
-   comment — a comment saying "no commit" is not evidence that the function
-   agrees with it. */
-  {
-    const fn = /function toggleRoster\(\)\{[\s\S]*?\n\}/.exec(SCRIPT);
-    check(!!fn, "toggleRoster has one definition, readable on its own");
-    if(fn){
-      check(!/\bcommit\(/.test(fn[0]), "toggleRoster calls no commit() — it is not a document change");
-      check(!/\bedit\(/.test(fn[0]), "toggleRoster calls no edit() either");
-      check(/classList\.toggle\("roster-hidden"\)/.test(fn[0]),
-        "it flips a body class — roster-hidden — which is the one truth CSS reads "
-        + "for panel-vs-rail visibility at every width");
-    }
-
-    /* The verb-tracking half: setCommandDisabled only captures
-       dataset.enabledTitle the FIRST time a button passes through it, then
-       hands that same captured string back on every later re-enable. If the
-       toggle's own sync only ever wrote button.title, a re-enable after the
-       verb had changed (Hide -> Show, or back) would restore whatever verb was
-       live at boot instead of the current one — a stale tooltip that looks
-       right until the state has actually flipped at least once. */
-    const sync = /function syncRosterToggle\(\)\{[\s\S]*?\n\}/.exec(SCRIPT);
-    check(!!sync, "the roster toggle has one synchronizer for its pressed state and tooltip");
-    if(sync){
-      check(/dataset\.enabledTitle\s*=/.test(sync[0]),
-        "syncRosterToggle writes dataset.enabledTitle itself, not just the live title — "
-        + "or a later setCommandDisabled re-enable restores a stale verb from boot");
-      check(/aria-pressed/.test(sync[0]),
-        "and it re-reads the pressed state onto every toggleRoster button");
-      /* The panel's own close button (test/dom.js §4k3) is a plain close
-         affordance and ships no aria-pressed in markup — writing the attribute
-         unconditionally would announce it as a permanently-pressed toggle. The
-         guard has to gate the write itself, not just exist somewhere nearby. */
-      check(/if\(b\.hasAttribute\("aria-pressed"\)\)\s*b\.setAttribute\("aria-pressed"/.test(sync[0]),
-        "…but only onto buttons that already carry aria-pressed in markup — "
-        + "the panel's close button must not be handed the attribute here");
-    }
-  }
-
-/* ---------------------------------------------------------- 10. two Opens at once
-
-   Opening a roster is asynchronous twice over: the file is read, then every
-   photo in it is decoded before anything is adopted. Two Opens can therefore be
-   in flight together, and the one that finishes first is whichever has fewer
-   photos — not whichever the user asked for last. Without a guard, picking a
-   30-photo roster, changing your mind and picking a small one leaves the small
-   one on screen for a moment and then replaces it with the roster that was
-   rejected.
-
-   The rule is simply "the last file picked wins", and these prove it holds in
-   both orders. */
 
   {
     const M = makeModule();
@@ -6000,7 +4773,6 @@ async function runSuite(){
                           title:"Roster " + n});
     const done = (o, st) => o.res({ok:true, state:st, repaired:[]});
 
-    /* -------- the undisturbed case first: one Open, and it lands */
     {
       const before = M.docGen;
       const A = opened("A");
@@ -6019,9 +4791,7 @@ async function runSuite(){
       eq(M.docGen, before + 1, "opening a different roster advances the generation");
       eq(M.opening[M.opening.length - 1], "", "and the opening status is cleared");
       check(M.toasts.some(t => /Opened alpha\.json/.test(t)), "the open is reported");
-      /* The adoption repaints through renderAll(), which is not in this module
-         — so drive the label the way renderAll would and check what it shows.
-         A just-opened file is saved by definition: it came off disk. */
+
       M.updateDocLabel();
       eq(M.shown.name, "alpha", "the status shows the opened file's name");
       eq(M.shown.saved, true, "and the saved icon");
@@ -6029,11 +4799,10 @@ async function runSuite(){
       eq(M.shown.status, "Saved", "and the Saved status name");
     }
 
-    /* -------- reverse order: the second file finishes first */
     {
       const A = opened("A2"), B = opened("B2");
-      M.pick("big.json", "{A}");        // many photos, slow
-      M.pick("small.json", "{B}");      // few photos, fast
+      M.pick("big.json", "{A}");
+      M.pick("small.json", "{B}");
       eq(M.opens.length, 2, "both opens are in flight");
       const [slow, fast] = M.opens.splice(0, 2);
 
@@ -6053,7 +4822,6 @@ async function runSuite(){
       eq(M.toasts.length, toasts, "and says nothing — the user has already moved on");
     }
 
-    /* -------- forward order: the first file finishes first, and still loses */
     {
       const A = opened("A3"), B = opened("B3");
       const was = M.state;
@@ -6072,7 +4840,6 @@ async function runSuite(){
       eq(M.docName, "second", "with its name");
     }
 
-    /* -------- a superseded open must not clear the current one's status */
     {
       const A = opened("A4"), B = opened("B4");
       M.pick("stale.json", "{A}");
@@ -6086,7 +4853,6 @@ async function runSuite(){
         "the status bar still names the open that is actually running — got "
         + JSON.stringify(shown));
 
-      /* nor may it report its own failure over the top of a live open */
       const alerts = M.alerts.length;
       done(current, B);
       await tick();
@@ -6094,7 +4860,6 @@ async function runSuite(){
       eq(M.opening[M.opening.length - 1], "", "and the running one clears the status when it lands");
     }
 
-    /* -------- a refused file leaves the open document exactly as it was */
     {
       const was = M.state, name = M.docName;
       M.dirtyDoc = true;
@@ -6110,7 +4875,6 @@ async function runSuite(){
       M.dirtyDoc = false;
     }
 
-    /* -------- a decode that throws is a refusal, not an unhandled rejection */
     {
       const was = M.state;
       M.pick("throws.json", "{A}");
@@ -6122,7 +4886,6 @@ async function runSuite(){
       eq(M.opening[M.opening.length - 1], "", "and clears the status");
     }
 
-    /* -------- and a file that cannot be read at all */
     {
       const was = M.state, opens = M.opens.length;
       M.setReadFails(true);
@@ -6135,24 +4898,12 @@ async function runSuite(){
       eq(M.opening[M.opening.length - 1], "", "and clears the status");
     }
 
-/* ---------------------------------------------------------- 11. a read that
-   fails after a newer Open has started
-
-   POST-AUDIT REGRESSION. The read-failure handler cleared the status only when
-   its sequence was still current — and then alerted unconditionally. So
-   picking a file on a slow or disconnected volume, giving up and picking
-   another one produced a modal about the first file while the second was
-   opening perfectly well behind it. The alert belongs to the same guard as the
-   status: a superseded read is a failure nobody is waiting to hear about. */
-
     {
       M.setReadHold(true);
 
-      /* the control: a read that fails while it is still the current one must
-         still report, or the fix is "never report anything" */
       {
         const alerts = M.alerts.length, was = M.state;
-        const base = M.reads.length;      // every earlier pick left one behind
+        const base = M.reads.length;
         M.pick("gone.json", "{A}");
         eq(M.reads.length - base, 1, "the reader was started and is holding");
         M.reads.splice(base, 1)[0].fail();
@@ -6164,7 +4915,6 @@ async function runSuite(){
         check(M.state === was, "and touches nothing else");
       }
 
-      /* and the regression itself */
       {
         const alerts  = M.alerts.length;
         const opens   = M.opens.length;
@@ -6172,8 +4922,8 @@ async function runSuite(){
         const was     = M.state, name = M.docName;
 
         const base = M.reads.length;
-        M.pick("slow.json", "{A}");        // starts, and is about to fail
-        M.pick("quick.json", "{B}");       // supersedes it
+        M.pick("slow.json", "{A}");
+        M.pick("quick.json", "{B}");
         eq(M.reads.length - base, 2, "both reads are in flight");
         const [slow, quick] = M.reads.splice(base, 2);
 
@@ -6193,7 +4943,6 @@ async function runSuite(){
         eq(M.history.length, hist, "or its history");
         eq(M.opens.length, opens, "and never reaches the validator");
 
-        /* the newer Open is unaffected by any of it */
         quick.deliver();
         await tick();
         eq(M.opens.length, opens + 1, "the newer read reaches the validator");
@@ -6207,15 +4956,6 @@ async function runSuite(){
 
       M.setReadHold(false);
     }
-
-/* ---------------------------------------------------------- 12. a superseded
-   Open is told to stop, rather than merely ignored
-
-   openSeq always stopped an older Open ADOPTING its result. It did not stop it
-   doing the work: every remaining photo in the abandoned roster went on
-   decoding, competing for the main thread with the roster the user actually
-   asked for. The listener now hands openRoster a predicate asking the same
-   question the guard asks, so the decoding loop can give up between photos. */
 
     {
       const A = opened("A12"), B = opened("B12");
@@ -6233,9 +4973,6 @@ async function runSuite(){
         "and turns true the moment a newer Open supersedes it");
       eq(second.options.cancelled(), false, "while the newer one is not cancelled");
 
-      /* what a cancelled openRoster hands back, and what the listener does with
-         it: nothing at all. It is deliberately not a refusal — there is nothing
-         wrong with the file, so there is nothing to report. */
       const alerts = M.alerts.length, toasts = M.toasts.length;
       const hist   = M.history.length, gen = M.docGen;
       const was    = M.state, name = M.docName;
@@ -6256,7 +4993,6 @@ async function runSuite(){
         "and leaves the status belonging to the Open that is still running — got "
         + JSON.stringify(M.opening[M.opening.length - 1]));
 
-      /* the current Open continues normally */
       M.opens.splice(M.opens.indexOf(second), 1);
       second.res({ok:true, state:B, repaired:[]});
       await tick();
@@ -6268,41 +5004,26 @@ async function runSuite(){
     }
   }
 
-  /* ---------------------------------------------------------- 13. the roster
-     arrows carry people across grade boundaries
-
-     state.people is NOT grouped by grade — renderRoster derives the visible
-     order by filtering each tier in turn — so a crossing move is two writes:
-     the tierId that decides WHICH group, and the array position that decides
-     WHERE in it. Setting only the first leaves the person wherever their old
-     index happens to fall among the new group, which is a move to a plausible
-     but arbitrary rank. Every case below therefore asserts the filtered order,
-     not just the tierId, because the filtered order is what the user sees. */
-
   {
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
     const T = M.state.tiers;
 
-    /* Three grades' worth of people in deliberately interleaved array order, so
-       nothing here can pass by the array happening to be sorted by grade. */
     const mk = (name, ti) => ({id:"p" + name, name:name, tierId:T[ti].id,
                                groupId:null, role:"", photo:null, pw:0, ph:0, frame:null});
     const seed = () => {
       M.state.people = [mk("Ana",0), mk("Cy",1), mk("Bo",0), mk("Di",1)];
     };
-    // what the roster actually draws: tiers in order, each filtered from people
+
     const visible = () => T.map(t => M.state.people.filter(p => p.tierId === t.id)
                                                    .map(p => p.name)).filter(g => g.length);
     const order = () => M.state.people.map(p => p.name).join(",");
     const idOf  = n => M.state.people.find(p => p.name === n).id;
-    /* null-safe: a resolver that wrongly returns null is a failure to report,
-       not an exception that abandons the rest of the section */
+
     const kindOf = (n, dir) => { const w = M.moveTarget(idOf(n), dir); return w ? w.kind : null; };
     const tierOf = (n, dir) => { const w = M.moveTarget(idOf(n), dir); return w ? w.tier : null; };
 
-    /* --- the regression: within a group nothing about this changed --- */
     seed();
     const before = M.state.people.slice();
     M.movePerson(idOf("Ana"), 1);
@@ -6315,7 +5036,6 @@ async function runSuite(){
     eq(M.state.people.filter(p => p.tierId === T[0].id).length, 2,
       "and nobody changed grade");
 
-    /* --- down off the end of a grade lands first in the next --- */
     seed();
     eq(kindOf("Bo", 1), "grade", "the last person of a grade has a grade to move down into");
     check(tierOf("Bo", 1) === T[1], "and it is the next tier in state.tiers");
@@ -6324,7 +5044,6 @@ async function runSuite(){
     eq(JSON.stringify(visible()), JSON.stringify([["Ana"],["Bo","Cy","Di"]]),
       "and lands them FIRST in the new group, not wherever their old index fell");
 
-    /* --- up off the start of a grade lands last in the previous --- */
     seed();
     eq(kindOf("Cy", -1), "grade", "the first person of a grade has a grade to move up into");
     M.movePerson(idOf("Cy"), -1);
@@ -6332,11 +5051,8 @@ async function runSuite(){
     eq(JSON.stringify(visible()), JSON.stringify([["Ana","Bo","Cy"],["Di"]]),
       "and lands them LAST in the previous group");
 
-    /* --- an empty grade is a destination, not a gap to skip over ---
-       This is how a grade that nobody is in yet gets its first member; skipping
-       it would make the arrow jump two grades and strand the empty one. */
     seed();
-    M.state.people = [mk("Ana",0), mk("Bo",0)];          // T[1] and beyond hold nobody
+    M.state.people = [mk("Ana",0), mk("Bo",0)];
     eq(visible().length, 1, "only one group is drawn while the others are empty");
     eq(kindOf("Bo", 1), "grade", "the last person can still move down into an empty grade");
     check(tierOf("Bo", 1) === T[1], "into the adjacent one, not the next populated one");
@@ -6345,7 +5061,6 @@ async function runSuite(){
     eq(JSON.stringify(visible()), JSON.stringify([["Ana"],["Bo"]]),
       "and that group now appears in the roster");
 
-    /* --- the disabled rule is about the whole roster, not the group --- */
     seed();
     check(M.moveTarget(idOf("Ana"), -1) === null,
       "the first person of the first grade cannot move up");
@@ -6353,8 +5068,7 @@ async function runSuite(){
       check(M.moveTarget(idOf(name), dir) !== null,
         "everyone else keeps both arrows — " + name + " " + (dir < 0 ? "up" : "down"));
     }
-    /* What closes Down is the last TIER, not the last populated one: Di is last
-       in the last group anyone is in, and still has empty grades below to fill. */
+
     check(M.moveTarget(idOf("Di"), 1) !== null,
       "the last person of the last populated grade can still move down into the empty grades below");
     M.state.people.push(mk("Zoe", T.length - 1));
@@ -6362,22 +5076,19 @@ async function runSuite(){
       "only the last person of the last grade in state.tiers cannot move down");
     check(M.moveTarget(idOf("Zoe"), -1) !== null, "though they can still move up");
 
-    /* --- the history entry names the destination only when there is one --- */
     seed();
     eq(M.moveLabel(idOf("Ana"), 1), "moved Ana",
       "a within-group move is recorded as it always was");
     eq(M.moveLabel(idOf("Bo"), 1), "moved Bo to " + M.gradeName(T[1]),
       "a crossing move names the grade it goes to");
     check(/ to /.test(M.moveLabel(idOf("Cy"), -1)), "in both directions");
-    /* the label is resolved BEFORE the move — afterwards the person is already
-       in the destination and every move would read as a plain reorder */
+
     M.movePerson(idOf("Bo"), 1);
     eq(M.moveLabel(idOf("Bo"), -1), "moved Bo to " + M.gradeName(T[0]),
       "and still describes the move ahead of it, not the one behind");
 
-    /* --- one undo step, restoring both halves of the write --- */
     seed();
-    M.state.tiers[1].label = "";                        // no name: the code stands in
+    M.state.tiers[1].label = "";
     eq(M.gradeName(T[1]), T[1].code, "a grade with no name is called by its code");
     const steps = M.history.length;
     M.commit(M.moveLabel(idOf("Bo"), 1), () => M.movePerson(idOf("Bo"), 1));
@@ -6390,14 +5101,6 @@ async function runSuite(){
       "together with the position — both halves of the write, or the row lands in the wrong rank");
   }
 
-
-/* ------------------------------------------------- 13. a drop is a destination
-
-   The arrows above say "one step that way". A drop says "here", and nothing in
-   that API can carry it — so reorderPerson resolves the destination and reaches
-   it by driving movePerson in ±1 steps. Two properties decide whether that is a
-   real answer or a trick: the whole walk has to be ONE undo step, and the walk
-   has to stop. Everything else here is the four drops the roster can express. */
 {
   const M = makeModule();
   M.state = M.defaults();
@@ -6405,8 +5108,7 @@ async function runSuite(){
   const T = M.state.tiers;
   const mk = (name, ti) => ({id:"p" + name, name:name, tierId:T[ti].id,
                              groupId:null, role:"", photo:null, pw:0, ph:0, frame:null});
-  /* Interleaved on purpose, as §12's seed is: nothing here may pass by
-     state.people happening to be sorted by grade. */
+
   const seed = () => {
     M.state.people = [mk("Ana",0), mk("Cy",1), mk("Bo",0), mk("Di",1), mk("Ed",2)];
     M.dirtyDoc = false;
@@ -6416,7 +5118,6 @@ async function runSuite(){
   const idOf = n => (M.state.people.find(p => p.name === n) || {}).id;
   const shown = () => JSON.stringify(visible());
 
-  /* --- a drop between two rows of one grade --- */
   seed();
   eq(shown(), JSON.stringify([["Ana","Bo"],["Cy","Di"],["Ed"]]), "the seeded roster");
   check(M.reorderPerson(idOf("Bo"), idOf("Ana"), false), "dropping Bo above Ana is a move");
@@ -6424,27 +5125,20 @@ async function runSuite(){
     "…and it reorders them inside their own grade");
   eq(M.state.people.find(p => p.name === "Bo").tierId, T[0].id, "without changing their grade");
 
-  /* --- a drop into another grade, landing at a named position --- */
   seed();
   check(M.reorderPerson(idOf("Ana"), idOf("Di"), false), "dropping Ana above Di is a move");
   eq(shown(), JSON.stringify([["Bo"],["Cy","Ana","Di"],["Ed"]]),
     "…and she lands between the two she was dropped between, not at an end");
   eq(M.state.people.find(p => p.name === "Ana").tierId, T[1].id, "in the grade she was dropped in");
 
-  /* --- a drop on a heading, which the caller resolves to that grade's last row --- */
   seed();
   check(M.reorderPerson(idOf("Ana"), idOf("Di"), true), "dropping Ana after the last of a grade");
   eq(shown(), JSON.stringify([["Bo"],["Cy","Di","Ana"],["Ed"]]),
     "…puts her at the end of it, which is what a heading means");
 
-  /* --- a drop that changes nothing --- */
   seed();
   const before = M.history.length;
-  /* "Returned false" is not the whole claim, and on its own it is not
-     falsifiable: a drop that is ATTEMPTED and stalls also returns false, having
-     taken a snapshot, added an entry and put the roster back. Deleting both
-     refusals left every one of these green for that reason. So each one asserts
-     the refusal AND that nothing was spent on it. */
+
   const refused = (src, tgt, after, msg) => {
     const at = M.history.length;
     check(M.reorderPerson(src, tgt, after) === false && M.history.length === at,
@@ -6458,11 +5152,6 @@ async function runSuite(){
   eq(shown(), JSON.stringify([["Ana","Bo"],["Cy","Di"],["Ed"]]), "or touched the roster");
   eq(M.dirtyDoc, false, "or marked the document dirty");
 
-  /* --- ONE undo step, however many steps the walk took ---
-     The property the whole design turns on. A person arriving at their
-     destination in five presses of Ctrl+Z would be worse than no drag at all,
-     so the count is asserted against the number of ±1 steps the walk actually
-     needed — computed from the seeded order rather than written down here. */
   seed();
   const hist = M.history.length;
   const startedAt = M.state.people.findIndex(p => p.name === "Ana");
@@ -6478,60 +5167,41 @@ async function runSuite(){
     "so one undo restores the order the drag started from");
   eq(M.state.people.find(p => p.name === "Ana").tierId, T[0].id, "and the grade with it");
 
-  /* --- the label names where they LANDED, not what they passed through ---
-     A directional label names the adjacent grade. Ana crosses two boundaries
-     here, so a label built from a direction would name grade 2 while she is
-     standing in grade 3. */
   seed();
   M.reorderPerson(idOf("Ana"), idOf("Ed"), true);
   eq((M.history[M.history.length - 1] || {}).label, "moved Ana to " + M.gradeName(T[2]),
     "a drop over two boundaries names the grade it landed in");
   check((M.history[M.history.length - 1] || {}).label.indexOf(M.gradeName(T[1])) < 0,
     "…and not the one it passed through");
-  /* and the sentence is the menu's own, from one writer */
+
   seed();
   eq(M.moveLabelTo(idOf("Bo"), T[1]), M.moveLabel(idOf("Bo"), 1),
     "moveLabel and moveLabelTo produce the same sentence for the same move");
   eq(M.moveLabelTo(idOf("Ana"), T[0]), "moved Ana",
     "and a destination the person is already in is not a crossing");
 
-  /* --- a within-grade drop is not reported as a crossing --- */
   seed();
   M.reorderPerson(idOf("Bo"), idOf("Ana"), false);
   eq((M.history[M.history.length - 1] || {}).label, "moved Bo",
     "a reorder inside one grade says only that");
 
-  /* --- the walk terminates, and a walk that cannot finish changes nothing ---
-     movePerson is driven in a loop, so the one way this design fails badly is a
-     loop that never ends or one that gives up with the person half-way. The
-     bound is proved by breaking the step: a movePerson that refuses everything
-     must leave the roster exactly as it was found. */
   {
     const N = makeModule();
     N.state = N.defaults();
     N.state.tiers = sixGrades();
     const TT = N.state.tiers;
-    /* Built against N's OWN tiers: mk() above closes over M's, and a person
-       carrying another document's tierId is on no grade at all here — which
-       would make this section pass by having nothing to move rather than by the
-       guard doing its job. */
+
     const nk = (name, ti) => ({id:"p" + name, name:name, tierId:TT[ti].id,
                                groupId:null, role:"", photo:null, pw:0, ph:0, frame:null});
     N.state.people = [nk("Ana",0), nk("Cy",1), nk("Bo",0)];
     const was = N.state.people.map(p => p.name + "@" + p.tierId).join(",");
     const entries = N.history.length;
-    /* A step that achieves nothing, which is what walkOnce is there to notice.
-       Driven through the real reorderPerson so the guard, the restore and the
-       report are the shipped ones. */
+
     N.resetSteps();
     N.breakTheStep();
     const done = N.reorderPerson(N.state.people[0].id, N.state.people[2].id, true);
     eq(done, false, "a walk that cannot make progress reports failure");
-    /* Both guards stop this walk, and they are not the same guard: the bound
-       stops it after the whole roster's worth of spins, the progress check
-       stops it on the first step that achieves nothing. Only the step COUNT
-       tells them apart — without this the two are one assertion, and deleting
-       the progress check goes unnoticed because the bound catches it anyway. */
+
     eq(N.steps, 1,
       "…on the FIRST step that achieves nothing, not after spending the whole "
       + "bound — got " + N.steps + " steps");
@@ -6540,10 +5210,6 @@ async function runSuite(){
     check(N.alerts.some(a => /could not be completed/.test(a)),
       "…and it says so rather than failing silently — got " + JSON.stringify(N.alerts));
 
-    /* --- the restore, exercised by a walk that really did move somebody ---
-       breakTheStep() above stalls on the first call, so nobody is half-moved
-       and the array restore is never what puts the roster back. This lets three
-       real steps through and then stalls, which is the state the restore is for. */
     const P = makeModule();
     P.state = P.defaults();
     P.state.tiers = sixGrades();
@@ -6561,19 +5227,9 @@ async function runSuite(){
   }
 }
 
-/* ------------------------------------------------- 14. toCSV, the flat-text
-   export
-
-   toCSV is a pure function of {people, tiers} — no document scaffolding is
-   needed to drive it, so every case below hands it a plain object literal
-   built for that one case and compares the result against a LITERAL expected
-   string, never against csvField/toCSV logic re-run in the test. That is the
-   second source: a test that derived its own expectation by quoting the same
-   way the app does would agree with the app no matter what the app did. */
 {
   const M = makeModule();
 
-  /* --- two plain people, roster order, header first --- */
   {
     const st = {
       tiers: [{id:"t1", code:"P", label:"Partner"}, {id:"t2", code:"A", label:"Associate"}],
@@ -6588,7 +5244,6 @@ async function runSuite(){
       "header, then one row per person in roster order, semicolon-delimited");
   }
 
-  /* --- a name holding the delimiter is quoted --- */
   {
     const st = {
       tiers: [{id:"t1", code:"P", label:"Partner"}],
@@ -6599,7 +5254,6 @@ async function runSuite(){
       "a name containing the ; delimiter is wrapped in quotes");
   }
 
-  /* --- a name holding a double quote is quoted with the quote doubled --- */
   {
     const st = {
       tiers: [{id:"t1", code:"P", label:"Partner"}],
@@ -6610,8 +5264,6 @@ async function runSuite(){
       "a name containing a double quote is wrapped in quotes with the inner quote doubled");
   }
 
-  /* --- grade cell: code, then label when code is empty, then "" when the
-     person's tierId matches no tier at all --- */
   {
     const st = {
       tiers: [
@@ -6630,14 +5282,12 @@ async function runSuite(){
       + "an unmatched tierId");
   }
 
-  /* --- zero people: an honest header-only file, no trailing newline --- */
   {
     const st = {tiers: [{id:"t1", code:"P", label:"Partner"}], people: []};
     eq(M.toCSV(st), "Name;Grade;Group;Role",
       "zero people is the header line alone, with no trailing newline");
   }
 
-  /* --- a field holding a line break is quoted --- */
   {
     const st = {
       tiers: [{id:"t1", code:"P", label:"Partner"}],
@@ -6650,31 +5300,18 @@ async function runSuite(){
   }
 }
 
-/* ------------------------------------------------- 15. Groups: the second
-   dimension's one management surface (Structure ▸ Group)
-
-   Reorder, rename-or-merge, and the drop reorderGroupRow answers for. None
-   of the three creates or deletes a group — that stays resolveGroupId's and
-   pruneGroups' job — so every assertion below is about ORDER, LABEL and
-   which person points where, never about an entity's existence. */
 {
   const M = makeModule();
   M.state = M.defaults();
   M.state.tiers = sixGrades();
   const T = M.state.tiers;
-  /* Three groups built through the real resolveGroupId, with people attached
-     the same way Add/Edit/paste attach them — never a hand-built {id,label}
-     literal, which would prove nothing about resolveGroupId itself. Counts
-     2, 1, 1: Berlin has two people, Munich one, and "Berln" — the phantom
-     typo — one, so it stays visible as its own row rather than folding into
-     Berlin's count. */
+
   const berlinId = M.resolveGroupId(M.state, "Berlin");
   const munichId = M.resolveGroupId(M.state, "Munich");
   const berlnId  = M.resolveGroupId(M.state, "Berln");
   const mk = (name, groupId) => ({id:"p"+name, name:name, tierId:T[0].id, groupId:groupId, role:""});
   M.state.people = [mk("Ana", berlinId), mk("Bo", berlinId), mk("Cy", munichId), mk("Di", berlnId)];
 
-  /* --- (a) the list, built by syncGroupModal, read back through groupRows() --- */
   M.syncGroupModal();
   eq(JSON.stringify(M.groupRows().map(r => [r.label, r.count])),
      JSON.stringify([["Berlin","2"],["Munich","1"],["Berln","1"]]),
@@ -6682,7 +5319,6 @@ async function runSuite(){
      + "live count — got " + JSON.stringify(M.groupRows()));
   check(M.groupEmptyHidden === true, "the empty-state sentence is hidden once groups exist");
 
-  /* --- (b) moveGroup: one commit per move, and the disabled edges --- */
   {
     const before = M.history.length;
     check(M.moveGroup(munichId, -1), "Munich moves up, ahead of Berlin");
@@ -6696,8 +5332,6 @@ async function runSuite(){
     eq(rows[1].upDisabled, false, "…and a middle row's Up is not");
     eq(rows[0].downDisabled, false, "…nor is the first row's Down");
 
-    /* out of range: refused silently, no history spent — commit() always
-       snapshots, so a refusal that reached it would still cost one entry */
     const at = M.history.length;
     check(M.moveGroup(munichId, -1) === false, "Munich is already first — moving up is refused");
     check(M.moveGroup(berlnId, 1) === false, "Berln is already last — moving down is refused");
@@ -6708,13 +5342,6 @@ async function runSuite(){
       "…restoring the original order");
   }
 
-  /* --- (c) rename: one commit, the label changes, every groupId is untouched
-     Renaming Munich (not Berlin — (d) below collides a rename WITH "Berlin",
-     and this must not spend that target first) proves the plain-rename path.
-     No undo here — (d) is the one the spec asks to prove undo against, with
-     more at stake (a merge), and leaving this block undo-free keeps its own
-     history.length math simple: nothing before it has ever called undo, so a
-     plain +1 is the whole story. */
   {
     const before = M.history.length;
     const cyGroupWas = (M.state.people.find(p => p.name === "Cy") || {}).groupId;
@@ -6727,11 +5354,6 @@ async function runSuite(){
       "Cy's groupId is exactly what it was before — identity, not just the label");
   }
 
-  /* --- (d) rename to a case-insensitive match: a merge, not a duplicate ---
-     history[i] holds the state right BEFORE its i-th tracked mutation, and
-     live state sits one mutation ahead until undo/redo bring it back in sync
-     (see the comment above `let historyPending`) — nothing has called undo before this
-     block, so the commit below still grows the array by exactly one. */
   {
     const before = M.history.length;
     const berlnMembersWere = M.state.people.filter(p => p.groupId === berlnId).map(p => p.id);
@@ -6746,8 +5368,7 @@ async function runSuite(){
       "the survivor keeps its OWN casing — the typed \"berlin\" never lands anywhere");
     eq(M.state.people.filter(p => p.groupId === berlinId).map(p => p.name).sort().join(","),
       "Ana,Bo,Di", "all three people now point at the survivor, including the repointed Di");
-    /* position: (b) left Berlin at state.groups[0], and a merge must not move
-       it — asserted against the array itself, not a re-derived index */
+
     eq((M.state.groups[0] || {}).id, berlinId, "the survivor keeps its own position");
     M.undo();
     eq(M.state.groups.length, 3, "undo restores both entities");
@@ -6756,7 +5377,6 @@ async function runSuite(){
       "…and Di's groupId is back on the source, not left pointing at the survivor");
   }
 
-  /* --- (e) cancelled, empty-after-trim, and textually unchanged all add no commit --- */
   {
     const before = M.history.length;
     M.setPrompt(null);
@@ -6768,16 +5388,6 @@ async function runSuite(){
     eq(M.history.length, before, "none of the three spent a commit");
   }
 
-  /* --- (f) reorderGroupRow: the drop, mirroring reorderGrade's own refusals ---
-     "One commit" is proved here by what a SINGLE undo reverses, not by a raw
-     length delta: (d)'s own undo just above leaves live state in sync with
-     history[hIndex] (historyPending=false), and the very next commit after any
-     undo/redo consolidates into that existing checkpoint instead of growing
-     the array — correct behaviour (see the comment above `let historyPending`), and
-     exactly why counting entries immediately after an undo would be asking
-     the wrong question. The three refusals below are unaffected either way:
-     none of them reaches commit(), so they can never touch the array or the
-     historyPending flag regardless of what came before. */
   {
     const order = () => M.state.groups.map(g => g.id);
     const [g0, g1, g2] = order();
@@ -6794,33 +5404,6 @@ async function runSuite(){
   }
 }
 
-/* ---------------------------------------------------------- 16. the guided
-   tour: demoDoc, and the swap that sets the user's document aside
-
-   No tour UI exists yet — no ring, no card, no entry button, no body class,
-   no Escape handling. This section proves the two things a later commit's
-   chrome will depend on: demoDoc() is a document the app itself would
-   accept, and startTour()/endTour() swap the whole document identity —
-   state, undo history, filename, dirty flag — cleanly enough that an undo
-   after the tour behaves exactly as if the tour had never run.
-
-   (This suite already has two sections numbered 13, above — a numbering
-   quirk that predates this change. New sections keep counting up from the
-   actual end of the file rather than reusing a number that already means
-   something else here, so this one is 16.) */
-
-  /* Every one of 16a through 16f runs through guarded(): demoDoc() can be
-     made to throw by a build-order bug (filtering a tier out by code, then
-     resolving a person's grade by that same code — the Assistant-rename trap
-     demoDoc()'s own comment names), and startTour() calls demoDoc()
-     internally, so the throw is reachable from every block below, not only
-     the one that calls demoDoc() directly. Without this, one such mutation
-     would abort every section after the first one that touches it, reporting
-     only "the suite threw" instead of the specific rule that broke — the
-     same tolerance callCommand's own try/catch already gives a renamed
-     COMMANDS entry. */
-
-  /* --- 16a. demoDoc is a legal, photo-less document --- */
   await guarded("16a completes without throwing", async () => {
     const M = makeModule();
     const doc = M.demoDoc();
@@ -6856,12 +5439,7 @@ async function runSuite(){
     check(attachOf("P") === false && attachOf("D") === false
        && attachOf("SM") === false && attachOf("SC") === false,
       "nobody else attaches");
-    /* Owner amendment: the template ships Assistant right-aligned, and
-       attached to Partner above it that reads lopsided on screen — demoDoc
-       centres it explicitly. A CLASS check over every tier, not a single
-       check on "A" alone: every OTHER tier here is un-stated and already
-       centred by newTier's own default, so this is what catches the next
-       tier nobody thought of drifting off "center" too. */
+
     check(doc.tiers.every(t => t.align === "center"),
       "every demo tier reads align \"center\" — got "
       + JSON.stringify(doc.tiers.map(t => t.code + ":" + t.align)));
@@ -6882,12 +5460,6 @@ async function runSuite(){
       + "one reused set of objects to corrupt");
   });
 
-  /* --- 16b. the full cycle: swap out, tour, swap back, and a live undo ---
-     Built through the real machinery — commit(), saveDoc(), commit() again —
-     so the pre-tour facts recorded below (docName, dirtyDoc, the rename)
-     are exactly what a user would have left behind, and the closing undo is
-     the assertion the whole step exists for: the stack must still be
-     CONNECTED after the round trip, not merely restored to the same length. */
   await guarded("16b completes without throwing", async () => {
     const M = makeModule();
     M.state = M.defaults();
@@ -6928,11 +5500,7 @@ async function runSuite(){
     eq(M.docName, "acme-roster", "endTour restores the user's filename");
     eq(M.dirtyDoc, true, "…and the user's dirty flag — true, from the rename made before the tour");
     eq(M.state.people.length, 2, "…and the user's own two people, not the demo's twelve");
-    /* null-safe throughout: a resolver that wrongly finds nobody is a failure
-       to report, not an exception that abandons the rest of the section — the
-       same standing section 13's own kindOf/tierOf helpers take, because a
-       corrupted hIndex after a buggy endTour can point undo at a snapshot
-       that predates Ana ever existing, and .find() then returns undefined. */
+
     const anaNow = () => (M.state.people.find(p => p.id === anaId) || {}).name;
     eq(anaNow(), "Ana Renamed", "…with the rename the user made still in place");
     eq(M.history.length, preTourHistoryLen, "…and the whole pre-tour undo stack, unchanged");
@@ -6946,13 +5514,6 @@ async function runSuite(){
     eq(anaNow(), "Ana Renamed", "…giving the rename back");
   });
 
-  /* --- 16c. photos survive the demo's own sweeps ---
-     The bug this whole step exists to prevent: photoSweep() runs on every
-     commit, including the demo's, and computes the reachable set from the
-     live `history` array. During the tour that array is the demo's — so
-     without tourSaved.history in the sweep, the demo's first commit would
-     purge the set-aside user's photo from photoStore before the tour ever
-     ends. */
   await guarded("16c completes without throwing", async () => {
     const M = makeModule();
     M.state = M.defaults();
@@ -6978,10 +5539,8 @@ async function runSuite(){
       + "only through tourSaved.history");
 
     M.endTour();
-    M.undo();   // undoes "gave Tom a title" — unpacks the snapshot taken just before it
-    /* null-safe, as 16b's own lookups are: a corrupted hIndex can point undo
-       at a snapshot from before Tom existed at all, and .find() then returns
-       undefined rather than Tom — a failure to report, not a crash. */
+    M.undo();
+
     const tom = M.state.people.find(p => p.id === tomId) || {};
     eq(tom.role, "", "undo restored Tom to before his title was set");
     eq(tom.photo, "data:image/png;base64,AAA",
@@ -6989,12 +5548,11 @@ async function runSuite(){
       + "almost swept it out of");
   });
 
-  /* --- 16d. refusals leave the user's document exactly where it was --- */
   await guarded("16d completes without throwing", async () => {
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
-    const original = M.state;   // identity, not a clone
+    const original = M.state;
 
     M.setModalOpen(true);
     check(M.startTour() === false, "a modal open refuses the tour");
@@ -7020,7 +5578,6 @@ async function runSuite(){
       "…still pointing at the user's real state, not the demo it would have replaced it with");
   });
 
-  /* --- 16e. the tour is a document-identity boundary, both ways --- */
   await guarded("16e completes without throwing", async () => {
     const M = makeModule();
     M.state = M.defaults();
@@ -7043,7 +5600,6 @@ async function runSuite(){
       + JSON.stringify(M.staleWrite(genMidTour, null)));
   });
 
-  /* --- 16f. the two guards read the SET-ASIDE flag, and the shortcut goes inert --- */
   await guarded("16f completes without throwing", async () => {
     const M = makeModule();
     M.state = M.defaults();
@@ -7051,27 +5607,23 @@ async function runSuite(){
     M.commit("added a person", () => { M.state.people.push(personIn(M, "One")); });
     M.commit("added another", () => { M.state.people.push(personIn(M, "Two")); });
 
-    /* beforeunload: mid-tour the flag that matters is the SET-ASIDE one, not
-       the live (demo) one. */
     check(M.startTour(), "the tour starts");
     let prevented = false;
     const evt = {preventDefault(){ prevented = true; }, returnValue:""};
 
-    M.tourSaved.dirtyDoc = true;   // the user left unsaved work behind
-    M.dirtyDoc = false;            // …but the demo itself is clean
+    M.tourSaved.dirtyDoc = true;
+    M.dirtyDoc = false;
     M.beforeUnload(evt);
     check(prevented, "the set-aside user document is dirty, so beforeunload still guards the tab");
 
-    M.tourSaved.dirtyDoc = false;  // the user's own document was clean
-    M.dirtyDoc = true;             // …the demo picked up dirt of its own, showing the tour
+    M.tourSaved.dirtyDoc = false;
+    M.dirtyDoc = true;
     prevented = false;
     M.beforeUnload(evt);
     check(!prevented,
       "the demo's own dirt is not the user's — nothing of theirs is unsaved, so no guard fires");
     M.endTour();
 
-    /* keydown: the undo shortcut reaches neither the user's history (set
-       aside) nor the demo's, for as long as the tour runs. */
     check(M.startTour(), "the tour starts again");
     M.commit("switched the demo to swimlanes", () => { M.state.layout = "swimlanes"; }, {render:"all"});
     const demoHistBefore = M.history.length, demoPendingBefore = M.historyPending;
@@ -7093,8 +5645,6 @@ async function runSuite(){
       + "makes it, proving the shortcut is live again");
   });
 
-  /* --- 16g. COMMANDS.tour, and the class truth sitting beside tourSaved's own
-     writes --- */
   await guarded("16g completes without throwing", async () => {
     const M = makeModule();
     M.state = M.defaults();
@@ -7114,8 +5664,6 @@ async function runSuite(){
       "…and the log's LAST entry is the remove — the two truths' writers sit adjacent, "
       + "got " + JSON.stringify(M.classes));
 
-    /* A refusal must not touch the class log at all — the same "untouched"
-       standing 16d already proves for state and tourSaved. */
     const before = M.classes.length;
     M.setModalOpen(true);
     check(M.startTour() === false, "a modal open refuses the tour");
@@ -7123,8 +5671,6 @@ async function runSuite(){
     M.setModalOpen(false);
   });
 
-  /* --- 16h. replay discards: tourGoto(0) rebuilds a fresh demo, mid-tour
-     work and all --- */
   await guarded("16h completes without throwing", async () => {
     const M = makeModule();
     M.state = M.defaults();
@@ -7145,12 +5691,6 @@ async function runSuite(){
     eq(M.tourStep, 0, "…and tourStep reads back the step just gone to");
   });
 
-  /* --- 16i. the buttons: Back is a no-op at step 0, Next walks the full
-     thirteen-step table and ends the tour at the last step instead of
-     walking past it, X ends the tour from anywhere. tourShown's records are
-     {pos, count, anchor} — showTourStep's new signature — so this walks the
-     live count off tourCount rather than a bare TOUR.length that would be
-     wrong the moment any step is skipped (16l covers a skip itself). --- */
   await guarded("16i completes without throwing", async () => {
     const M = makeModule();
     M.state = M.defaults();
@@ -7182,7 +5722,6 @@ async function runSuite(){
     const last = M.classes[M.classes.length - 1];
     check(!!last && last.op === "remove", "…and the class truth follows — the last write is the remove");
 
-    /* X ends the tour from any step, not only the last one. */
     check(M.startTour(), "the tour starts again");
     M.clickTourNext();
     eq(M.tourStep, 1, "…and has walked to step 1");
@@ -7190,8 +5729,6 @@ async function runSuite(){
     check(M.tourSaved === null, "the X ends the tour from wherever it was, not only the last step");
   });
 
-  /* --- 16j. Escape runs first and consumes, ahead of everything the gate now
-     sits in front of --- */
   await guarded("16j completes without throwing", async () => {
     const M = makeModule();
     M.state = M.defaults();
@@ -7206,12 +5743,6 @@ async function runSuite(){
       "…through endTour(), not through preventDefault() — Escape is left free to do whatever "
       + "else a browser does with it once the tour chrome is gone");
 
-    /* Not touring: the gate's own two branches are both false (tourSaved is
-       null), so execution falls all the way through the gate itself without
-       taking either of its actions. The rest of the handler is unchanged by
-       this step; §16f's own Ctrl+Z-after-tour assertions above already prove
-       that once the gate lets a keystroke past, the shortcut it guards works
-       exactly as it always did. */
     const genBefore = M.history.length;
     let threw = false;
     try{
@@ -7221,13 +5752,6 @@ async function runSuite(){
     eq(M.history.length, genBefore, "…and reaches none of the tour's own branches — nothing moved");
   });
 
-  /* --- 16k. Exactly THREE demonstrated mutations (owner amendment after
-     seeing the tour live): a SET-equality class check over the whole table,
-     not a claim about any one row's position — the day a fourteenth row
-     grows a `run`, or one of these three moves, this is what has to notice.
-     Every effect is driven through the REAL replay (tourGoto), not read off
-     a row's source text, so a `run` that lied about what it does would
-     still be caught here. */
   await guarded("16k completes without throwing", async () => {
     const M = makeModule();
     M.state = M.defaults();
@@ -7241,13 +5765,13 @@ async function runSuite(){
 
     check(M.startTour(), "the tour starts");
 
-    M.tourGoto(7);   // "A print preview" — immediately before any run
+    M.tourGoto(7);
     eq(M.state.layout, "pyramid", "before the first run: layout is still the template's own");
     eq(M.state.page, "landscape", "…page is still the template's own");
     eq(M.state.nameLabelPosition, "next",
       "…and name label position is big4-green's own literal choice");
 
-    M.tourGoto(8);   // the Layout step
+    M.tourGoto(8);
     eq(M.tourShown[M.tourShown.length - 1].anchor, "#layoutBtn",
       "confirmed by the anchor showTourStep was actually handed, not a recomputed position");
     eq(M.state.layout, "swimlanes", "the Layout run flips layout");
@@ -7255,7 +5779,7 @@ async function runSuite(){
     eq(M.state.nameLabelPosition, "next", "…nor name label position");
     eq(M.history.length, 1, "…as exactly one commit so far");
 
-    M.tourGoto(9);   // the Page step
+    M.tourGoto(9);
     eq(M.tourShown[M.tourShown.length - 1].anchor, "#pageBtn",
       "confirmed by the anchor showTourStep was actually handed");
     eq(M.state.layout, "swimlanes", "…layout still swimlanes, from the earlier run");
@@ -7263,7 +5787,7 @@ async function runSuite(){
     eq(M.state.nameLabelPosition, "next", "…nor name label position, yet");
     eq(M.history.length, 2, "…two commits now, one per run so far");
 
-    M.tourGoto(10);  // the Name labels step
+    M.tourGoto(10);
     eq(M.tourShown[M.tourShown.length - 1].anchor, "#nameLabelsBtn",
       "confirmed by the anchor showTourStep was actually handed");
     eq(M.state.layout, "swimlanes", "…layout still swimlanes");
@@ -7276,9 +5800,6 @@ async function runSuite(){
       + "own literal");
     eq(M.state.title, "Pearson Specter Litt", "…and title too — the demo's own literal, untouched");
 
-    /* Back across each run boundary reverts exactly that run's own field —
-       replay-from-scratch, not undo, so the OTHER two runs' effects survive
-       intact each time. */
     M.tourGoto(9);
     eq(M.state.nameLabelPosition, "next",
       "stepping back across the Name-labels run reverts JUST it");
@@ -7295,11 +5816,6 @@ async function runSuite(){
       "…with an empty history — replay-from-scratch discarded every commit, not undo");
   });
 
-  /* --- 16l. The skip rule: a hidden anchor drops its step out, the count and
-     the numbering are computed from what remains, and a run travels WITH its
-     row rather than living at a fixed index. Driven by anchor identity
-     throughout — never a magic position number — because the position is
-     exactly the thing the skip is supposed to be allowed to move. */
   await guarded("16l completes without throwing", async () => {
     const M = makeModule();
     M.state = M.defaults();
@@ -7315,9 +5831,6 @@ async function runSuite(){
     eq(M.tourShown[M.tourShown.length - 1].count, 12,
       "…and showTourStep was handed the shrunk count, not TOUR.length");
 
-    /* SHOWN's own anchor order is the record of what was actually shown —
-       not a position this test recomputes on its own, which could not tell
-       a genuine skip from a coincidence. */
     const lastAnchor = () => M.tourShown[M.tourShown.length - 1].anchor;
     let guard = 0;
     while(lastAnchor() !== '[data-cmd="groups"]' && guard++ < 20) M.clickTourNext();
@@ -7332,11 +5845,6 @@ async function runSuite(){
       "the run still fires once its own row comes up, at whatever position the skip left "
       + "it — being walked to by anchor, not by a fixed index, is the point");
 
-    /* Next must read the LIVE count, not TOUR.length: with one row hidden
-       there are only twelve live steps, so the true last one is reached
-       BEFORE tourStep+1 reaches TOUR's own thirteen — a listener comparing
-       against TOUR.length would call tourGoto() one step too far here
-       instead of ending the tour. */
     guard = 0;
     while(lastAnchor() !== '[data-cmd="tour"]' && guard++ < 20) M.clickTourNext();
     eq(M.tourStep, M.tourCount - 1, "…and that is the true last live position");
@@ -7345,12 +5853,6 @@ async function runSuite(){
       "Next at the true last live step ends the tour — a listener still comparing against "
       + "TOUR.length would re-enter tourGoto instead, clamp back to the same step, and never end");
 
-    /* Now the Layout run's own row is the one hidden too, alongside the
-       roster step already hidden above — a full walk over every live
-       position must never see layout become anything but pyramid. The
-       skip is per-row, though, not table-wide: the Page and Name-labels
-       runs' own rows are still live, so THEIR mutations must still fire
-       once the walk reaches them. */
     M.setRect("#layoutBtn", {width:0, height:0});
     check(M.startTour(), "the tour starts again with both anchors at zero");
     const live2 = M.tourLiveSteps();
@@ -7376,19 +5878,11 @@ async function runSuite(){
     eq(M.tourLiveSteps().length, 13, "restoring both rects brings the live list back to thirteen");
   });
 
-  /* --- 16m. The never-saved bar stays quiet about the demo's own dirt.
-     Driven through the real callers, the same way section 1 establishes the
-     baseline this step's middle assertion has to differ from: markDirty()
-     for an edit, updateDocLabel() to force the repaint the way section 3's
-     own comment says renderAll (not reachable from this module — see the
-     PREAMBLE stub above) would have triggered in the real app. */
   await guarded("16m completes without throwing", async () => {
     const M = makeModule();
     M.state = M.defaults();
     M.state.tiers = sixGrades();
 
-    /* baseline, unrelated to the tour: a dirty, unnamed USER document shows
-       the bar — the pre-existing rule this step must not disturb. */
     check(M.neverSavedBar.hidden, "a clean untitled document keeps the bar hidden");
     M.markDirty();
     check(!M.neverSavedBar.hidden,
@@ -7400,7 +5894,7 @@ async function runSuite(){
       "mid-tour, before the demo has any dirt of its own, the bar is hidden — the LIVE "
       + "docName/dirtyDoc read here are the demo's, not the user's");
 
-    M.tourGoto(8);   // the Layout step's own run commit
+    M.tourGoto(8);
     M.updateDocLabel();
     eq(M.dirtyDoc, true, "the demo's own run commit dirties the demo");
     eq(M.docName, "", "…and the demo has no filename either — the never-saved SHAPE, exactly");
@@ -7417,8 +5911,6 @@ async function runSuite(){
 
 }
 
-/* ---------------------------------------------------------- report */
-
 function report(){
   if(failures.length){
     console.log("FAILURES (" + failures.length + "):");
@@ -7430,20 +5922,8 @@ function report(){
   }
 }
 
-/* Under osascript, a top-level binding named exactly `run` is treated by the
-   JXA layer as AppleScript's `on run` handler and gets invoked a SECOND
-   time, automatically, once the script finishes loading — printing its
-   return value, a still-pending Promise, as "[object Promise]" on stdout.
-   The driver is named runSuite instead of run for exactly that reason:
-   renaming it back would reintroduce the stray print, and no amount of
-   restructuring the call below would fix it, because the print is not about
-   that statement at all. Under node nothing is printed either way, since
-   node has no such handler convention. */
 const pending = runSuite().then(report, e => {
-  /* A throw mid-run is itself a failure, and the assertions collected before it
-     are the context that explains where things went wrong — reporting only the
-     exception threw that away. JXA stacks are close to useless ("run@"), so the
-     message matters more than the trace. */
+
   failures.push("the suite threw before finishing: " + ((e && e.message) || e));
   report();
 });
